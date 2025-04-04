@@ -3,8 +3,8 @@ Changelog for package rclcpp_action
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
-Forthcoming
------------
+29.4.0 (2025-04-04)
+-------------------
 * Remove warning (`#2790 <https://github.com/ros2/rclcpp/issues/2790>`_)
 * Harden rclcpp_action::convert(). (`#2786 <https://github.com/ros2/rclcpp/issues/2786>`_)
 * Add new interfaces to enable introspection for action (`#2743 <https://github.com/ros2/rclcpp/issues/2743>`_)

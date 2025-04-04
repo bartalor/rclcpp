@@ -2,8 +2,8 @@
 Changelog for package rclcpp
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+29.4.0 (2025-04-04)
+-------------------
 * Removed trailing whitespace from the codebase. (`#2791 <https://github.com/ros2/rclcpp/issues/2791>`_)
 * Expanded docstring of `get_rmw_qos_profile()` (`#2787 <https://github.com/ros2/rclcpp/issues/2787>`_)
 * Set envars to run tests with rmw_zenoh_cpp with multicast discovery (`#2776 <https://github.com/ros2/rclcpp/issues/2776>`_)
