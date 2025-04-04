@@ -2,6 +2,14 @@
 Changelog for package rclcpp_components
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Removed trailing whitespace from the codebase. (`#2791 <https://github.com/ros2/rclcpp/issues/2791>`_)
+* add NO_UNDEFINED_SYMBOLS to rclcpp_components_register_node cmake macro (`#2746 <https://github.com/ros2/rclcpp/issues/2746>`_) (`#2764 <https://github.com/ros2/rclcpp/issues/2764>`_)
+* use maybe_unused attribute for the portability. (`#2758 <https://github.com/ros2/rclcpp/issues/2758>`_)
+* ComponentManager should just ignore unknown extra argument in the bas… (`#2723 <https://github.com/ros2/rclcpp/issues/2723>`_)
+* Contributors: Leander Stephen D'Souza, Tomoya Fujita, Jonas Otto
+
 29.3.0 (2024-12-20)
 -------------------
 * Add parsing for rest of obvious boolean extra arguments and throw for unsupported ones (`#2685 <https://github.com/ros2/rclcpp/issues/2685>`_)
