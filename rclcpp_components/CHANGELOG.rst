@@ -2,8 +2,8 @@
 Changelog for package rclcpp_components
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+30.0.0 (2025-07-01)
+-------------------
 * NEW PR: Add component_container for EventsExecutor (`#2885 <https://github.com/ros2/rclcpp/issues/2885>`_)
 * make sure that plugin arg includes the double colon. (`#2878 <https://github.com/ros2/rclcpp/issues/2878>`_)
 * Contributors: Mihir Rao, Tomoya Fujita

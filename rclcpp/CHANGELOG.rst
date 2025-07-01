@@ -2,8 +2,8 @@
 Changelog for package rclcpp
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+30.0.0 (2025-07-01)
+-------------------
 * Hand-code logging.hpp (`#2870 <https://github.com/ros2/rclcpp/issues/2870>`_)
 * Adressed TODO in node_graph (`#2877 <https://github.com/ros2/rclcpp/issues/2877>`_)
 * fix test_publisher_with_system_default_qos. (`#2881 <https://github.com/ros2/rclcpp/issues/2881>`_)
