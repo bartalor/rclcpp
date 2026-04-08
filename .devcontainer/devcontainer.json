@@ -8,19 +8,21 @@
             "USERNAME": "bar"
         }
     },
-    "workspaceFolder": "/home/ws/src/rclcpp",
-    "workspaceMount": "source=${localWorkspaceFolder},target=/home/ws/src/rclcpp,type=bind",
+    "workspaceFolder": "/home/bar/src/rclcpp",
+    "workspaceMount": "source=${localEnv:HOME},target=/home/bar,type=bind",
     "customizations": {
         "vscode": {
             "extensions": [
                 "llvm-vs-code-extensions.vscode-clangd",
                 "ms-vscode.cmake-tools",
-                "ms-iot.vscode-ros"
+                "ms-iot.vscode-ros",
+                "anthropic.claude-code"
             ],
             "settings": {
                 "clangd.arguments": [
                     "--compile-commands-dir=/home/ws/build/rclcpp"
-                ]
+                ],
+                "C_Cpp.intelliSenseEngine": "disabled"
             }
         }
     },
@@ -39,5 +41,5 @@
         "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
         "source=/dev/dri,target=/dev/dri,type=bind,consistency=cached"
     ],
-    "postCreateCommand": "sudo rosdep update && cd /home/ws && sudo rosdep install --from-paths src --ignore-src -y --skip-keys mimick_vendor && sudo chown -R $(whoami) /home/ws/"
+    "postCreateCommand": "bash .devcontainer/postCreate.sh"
 }
