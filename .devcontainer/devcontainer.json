@@ -8,8 +8,8 @@
             "USERNAME": "bar"
         }
     },
-    "workspaceFolder": "/home/ws",
-    "workspaceMount": "source=${localWorkspaceFolder},target=/home/ws,type=bind",
+    "workspaceFolder": "/home/ws/src/rclcpp",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/home/ws/src/rclcpp,type=bind",
     "customizations": {
         "vscode": {
             "extensions": [
@@ -19,7 +19,7 @@
             ],
             "settings": {
                 "clangd.arguments": [
-                    "--compile-commands-dir=/home/ws/build"
+                    "--compile-commands-dir=/home/ws/build/rclcpp"
                 ]
             }
         }
@@ -39,5 +39,5 @@
         "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
         "source=/dev/dri,target=/dev/dri,type=bind,consistency=cached"
     ],
-    "postCreateCommand": "sudo rosdep update && sudo rosdep install --from-paths src --ignore-src -y && sudo chown -R $(whoami) /home/ws/"
+    "postCreateCommand": "sudo rosdep update && cd /home/ws && sudo rosdep install --from-paths src --ignore-src -y --skip-keys mimick_vendor && sudo chown -R $(whoami) /home/ws/"
 }
