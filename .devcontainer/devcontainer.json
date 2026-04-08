@@ -1,16 +1,15 @@
 {
     "name": "rclcpp-dev",
+    "privileged": true,
+    "remoteUser": "bar",
     "build": {
         "dockerfile": "Dockerfile",
         "args": {
-            "USERNAME": "bar",
-            "USER_UID": "1000",
-            "USER_GID": "1000"
+            "USERNAME": "bar"
         }
     },
-    "workspaceMount": "source=${localWorkspaceFolder},target=/home/bar/ws/src/rclcpp,type=bind",
-    "workspaceFolder": "/home/bar/ws/src/rclcpp",
-    "remoteUser": "bar",
+    "workspaceFolder": "/home/ws",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/home/ws,type=bind",
     "customizations": {
         "vscode": {
             "extensions": [
@@ -20,10 +19,25 @@
             ],
             "settings": {
                 "clangd.arguments": [
-                    "--compile-commands-dir=/home/bar/ws/build"
+                    "--compile-commands-dir=/home/ws/build"
                 ]
             }
         }
     },
-    "postCreateCommand": "sudo apt-get update && cd /home/bar/ws && rosdep install --from-paths src --ignore-src -y"
+    "containerEnv": {
+        "DISPLAY": "unix:0",
+        "ROS_AUTOMATIC_DISCOVERY_RANGE": "LOCALHOST",
+        "ROS_DOMAIN_ID": "42"
+    },
+    "runArgs": [
+        "--net=host",
+        "--pid=host",
+        "--ipc=host",
+        "-e", "DISPLAY=${env:DISPLAY}"
+    ],
+    "mounts": [
+        "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
+        "source=/dev/dri,target=/dev/dri,type=bind,consistency=cached"
+    ],
+    "postCreateCommand": "sudo rosdep update && sudo rosdep install --from-paths src --ignore-src -y && sudo chown -R $(whoami) /home/ws/"
 }
