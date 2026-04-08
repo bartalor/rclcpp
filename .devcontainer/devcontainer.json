@@ -1,0 +1,29 @@
+{
+    "name": "rclcpp-dev",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "args": {
+            "USERNAME": "bar",
+            "USER_UID": "1000",
+            "USER_GID": "1000"
+        }
+    },
+    "workspaceMount": "source=${localWorkspaceFolder},target=/home/bar/ws/src/rclcpp,type=bind",
+    "workspaceFolder": "/home/bar/ws/src/rclcpp",
+    "remoteUser": "bar",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "llvm-vs-code-extensions.vscode-clangd",
+                "ms-vscode.cmake-tools",
+                "ms-iot.vscode-ros"
+            ],
+            "settings": {
+                "clangd.arguments": [
+                    "--compile-commands-dir=/home/bar/ws/build"
+                ]
+            }
+        }
+    },
+    "postCreateCommand": "sudo apt-get update && cd /home/bar/ws && rosdep install --from-paths src --ignore-src -y"
+}
