@@ -15,14 +15,12 @@
             "extensions": [
                 "llvm-vs-code-extensions.vscode-clangd",
                 "ms-vscode.cmake-tools",
-                "ms-iot.vscode-ros",
                 "anthropic.claude-code"
             ],
             "settings": {
                 "clangd.arguments": [
                     "--compile-commands-dir=/home/ws/build/rclcpp"
-                ],
-                "C_Cpp.intelliSenseEngine": "disabled"
+                ]
             }
         }
     },
