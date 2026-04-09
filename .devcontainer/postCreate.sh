@@ -1,11 +1,13 @@
 #!/bin/bash
 set -e
 
-# Set up colcon workspace
+# Set up colcon workspace with symlink to rclcpp
+sudo mkdir -p /home/ws/src/ros2
 sudo chown -R "$(whoami)" /home/ws
+ln -sfn "$HOME/src/ros2/rclcpp" /home/ws/src/ros2/rclcpp
 cd /home/ws
 
-# Clone ROS 2 repos (rclcpp already mounted, --skip-existing skips it)
+# Clone ROS 2 repos (rclcpp already symlinked, --skip-existing skips it)
 vcs import --input https://raw.githubusercontent.com/ros2/ros2/rolling/ros2.repos --skip-existing src
 
 # Install system dependencies
