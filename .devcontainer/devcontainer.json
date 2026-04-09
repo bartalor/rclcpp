@@ -8,8 +8,8 @@
             "USERNAME": "bar"
         }
     },
-    "workspaceFolder": "/home/bar/src/rclcpp",
-    "workspaceMount": "source=${localEnv:HOME}/src/rclcpp,target=/home/bar/src/rclcpp,type=bind",
+    "workspaceFolder": "/home/ws/src/ros2/rclcpp",
+    "workspaceMount": "source=${localEnv:HOME}/src/ros2/rclcpp,target=/home/ws/src/ros2/rclcpp,type=bind",
     "customizations": {
         "vscode": {
             "extensions": [
@@ -39,6 +39,7 @@
         "source=${localEnv:HOME}/.claude,target=/home/bar/.claude,type=bind",
         "source=${localEnv:HOME}/.claude/settings.json,target=/home/bar/.claude/settings.json,type=bind,readonly",
         "source=${localEnv:HOME}/.gitconfig,target=/home/bar/.gitconfig,type=bind,readonly",
+        "source=${localEnv:HOME}/.config/git/ignore,target=/home/bar/.config/git/ignore,type=bind,readonly",
         "source=${localEnv:HOME}/dotfiles,target=/home/bar/dotfiles,type=bind",
         "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
         "source=/dev/dri,target=/dev/dri,type=bind,consistency=cached"
