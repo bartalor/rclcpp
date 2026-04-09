@@ -8,8 +8,8 @@
             "USERNAME": "bar"
         }
     },
-    "workspaceFolder": "/home/ws/src/ros2/rclcpp",
-    "workspaceMount": "source=${localEnv:HOME}/src/ros2/rclcpp,target=/home/ws/src/ros2/rclcpp,type=bind",
+    "workspaceFolder": "/home/bar/src/ros2/rclcpp",
+    "workspaceMount": "source=${localEnv:HOME}/src/ros2/rclcpp,target=/home/bar/src/ros2/rclcpp,type=bind",
     "customizations": {
         "vscode": {
             "extensions": [
