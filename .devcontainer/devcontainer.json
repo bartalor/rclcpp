@@ -47,7 +47,7 @@
         "source=${localEnv:HOME}/dotfiles,target=/home/bar/dotfiles,type=bind",
         "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
         "source=/dev/dri,target=/dev/dri,type=bind,consistency=cached",
-        "source=rclcpp-workspace,target=/home/ws,type=volume",
+        "source=rclcpp-workspace-${devcontainerId},target=/home/ws,type=volume",
         "source=ccache-${devcontainerId},target=/tmp/.ccache,type=volume"
     ],
     "onCreateCommand": "bash .devcontainer/on-create-command.sh",
