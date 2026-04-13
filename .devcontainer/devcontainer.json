@@ -42,7 +42,6 @@
     "mounts": [
         "source=${localEnv:HOME}/.claude,target=/home/bar/.claude,type=bind",
         "source=${localEnv:HOME}/.claude/settings.json,target=/home/bar/.claude/settings.json,type=bind,readonly",
-        "source=${localEnv:HOME}/.gitconfig,target=/home/bar/.gitconfig,type=bind,readonly",
         "source=${localEnv:HOME}/.config/git/ignore,target=/home/bar/.config/git/ignore,type=bind,readonly",
         "source=${localEnv:HOME}/dotfiles,target=/home/bar/dotfiles,type=bind",
         "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",

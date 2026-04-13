@@ -1,6 +1,8 @@
 #!/bin/bash
 set -eo pipefail
 
+git config --global --add safe.directory "*"
+
 ROS2_REPOS_URL="https://raw.githubusercontent.com/ros2/ros2/rolling/ros2.repos"
 WS="/home/ws"
 
