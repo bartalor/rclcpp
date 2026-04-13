@@ -5,10 +5,9 @@ ROS2_REPOS_URL="https://raw.githubusercontent.com/ros2/ros2/rolling/ros2.repos"
 WS="/home/ws"
 
 # Ensure /home/ws exists and is owned by current user
-sudo mkdir -p "$WS/src/ros2"
-if [ "$(stat -c '%U' "$WS")" != "$(whoami)" ]; then
-    sudo chown -R "$(whoami)" "$WS"
-fi
+sudo mkdir -p "$WS"
+sudo chown "$(whoami)" "$WS"
+mkdir -p "$WS/src/ros2"
 
 # Symlink rclcpp source into workspace
 ln -sfn "$HOME/src/ros2/rclcpp" "$WS/src/ros2/rclcpp"
