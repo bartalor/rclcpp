@@ -34,7 +34,7 @@ rosdep install --from-paths src --ignore-src -y
 # Subsequent rebuilds after code changes should be run manually.
 . /opt/ros/rolling/setup.sh
 if [ ! -f "$WS/.colcon-built" ]; then
-    colcon build --symlink-install --packages-up-to rclcpp \
+    colcon build --symlink-install --packages-select rclcpp \
         --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
     touch "$WS/.colcon-built"
 fi
