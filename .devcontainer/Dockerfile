@@ -36,7 +36,6 @@ ENV PYTHONUNBUFFERED 1
 RUN apt-get update && \
     apt-get upgrade -y --with-new-pkgs && \
     apt-get install -y \
-      sudo \
       build-essential \
       cmake \
       gdb \
@@ -70,8 +69,8 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
 COPY --from=cacher $UNDERLAY_WS ./
 ARG UNDERLAY_MIXINS="release ccache lld"
 ARG CCACHE_DIR="$UNDERLAY_WS/.ccache"
-ENV MAKEFLAGS="-j2"
-RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
+RUN MAKEFLAGS="-j2" && export MAKEFLAGS && \
+    . /opt/ros/$ROS_DISTRO/setup.sh && \
     colcon cache lock && \
     colcon build \
       --symlink-install \
@@ -83,26 +82,10 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
 # multi-stage for developing
 FROM builder AS dever
 
-ARG USERNAME=bar
-ARG USER_UID=1000
-ARG USER_GID=$USER_UID
-
-# create dev user
-RUN if id -u $USER_UID 2>/dev/null; then userdel "$(id -un $USER_UID)"; fi \
-    && groupadd --gid $USER_GID $USERNAME \
-    && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
-    && echo "$USERNAME ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
-    && chmod 0440 /etc/sudoers.d/$USERNAME
-
 # edit apt for caching
 RUN mv /etc/apt/apt.conf.d/docker-clean /etc/apt/
-
-ENV SHELL=/bin/bash
 
 # source underlay for shell
 ARG OVERLAY_WS
 ENV OVERLAY_WS $OVERLAY_WS
 RUN echo "source \"$UNDERLAY_WS/install/setup.bash\"" >> /etc/bash.bashrc
-
-USER $USERNAME
-CMD ["/bin/bash"]
