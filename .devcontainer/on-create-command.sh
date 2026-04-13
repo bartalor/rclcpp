@@ -33,4 +33,4 @@ rosdep update
 rosdep install --from-paths src --ignore-src -y
 
 # Run initial build via update-content-command
-.devcontainer/update-content-command.sh
+"$HOME/src/ros2/rclcpp/.devcontainer/update-content-command.sh"
