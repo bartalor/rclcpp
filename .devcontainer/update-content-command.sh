@@ -9,7 +9,6 @@ colcon cache lock
 BUILD_UNFINISHED=$(
     colcon list \
         --names-only \
-        --packages-select rclcpp \
         --packages-skip-build-finished \
     | xargs)
 echo "BUILD_UNFINISHED: $BUILD_UNFINISHED"
@@ -17,7 +16,6 @@ echo "BUILD_UNFINISHED: $BUILD_UNFINISHED"
 BUILD_FAILED=$(
     colcon list \
         --names-only \
-        --packages-select rclcpp \
         --packages-select-build-failed \
     | xargs)
 echo "BUILD_FAILED: $BUILD_FAILED"
@@ -25,7 +23,6 @@ echo "BUILD_FAILED: $BUILD_FAILED"
 BUILD_INVALID=$(
     colcon list \
         --names-only \
-        --packages-select rclcpp \
         --packages-select-cache-invalid \
         --packages-select-cache-key build \
     | xargs)
@@ -36,7 +33,14 @@ if [ -n "$BUILD_UNFINISHED" ] || \
     [ -n "$BUILD_FAILED" ] || \
     [ -n "$BUILD_INVALID" ]
 then
-    BUILD_PACKAGES="rclcpp"
+    BUILD_PACKAGES=$(
+        colcon list \
+            --names-only \
+            --packages-above \
+            $BUILD_UNFINISHED \
+            $BUILD_FAILED \
+            $BUILD_INVALID \
+        | xargs)
 fi
 echo "BUILD_PACKAGES: $BUILD_PACKAGES"
 
