@@ -1,15 +1,14 @@
 {
     "name": "rclcpp-dev",
-    "privileged": true,
-    "remoteUser": "bar",
     "build": {
         "dockerfile": "Dockerfile",
+        "target": "dever",
         "args": {
             "USERNAME": "bar"
         }
     },
-    "workspaceFolder": "/home/bar/src/ros2/rclcpp",
-    "workspaceMount": "source=${localEnv:HOME}/src/ros2/rclcpp,target=/home/bar/src/ros2/rclcpp,type=bind",
+    "workspaceFolder": "/opt/overlay_ws/src/rclcpp",
+    "workspaceMount": "source=${localEnv:HOME}/src/ros2/rclcpp,target=/opt/overlay_ws/src/rclcpp,type=bind",
     "customizations": {
         "vscode": {
             "extensions": [
@@ -19,7 +18,7 @@
             ],
             "settings": {
                 "clangd.arguments": [
-                    "--compile-commands-dir=/home/ws/build/rclcpp"
+                    "--compile-commands-dir=/opt/overlay_ws/build/rclcpp"
                 ]
             }
         }
@@ -30,8 +29,8 @@
         "ROS_DOMAIN_ID": "42"
     },
     "remoteEnv": {
-        "CCACHE_DIR": "/tmp/.ccache",
-        "OVERLAY_MIXINS": "release ccache compile-commands lld"
+        "OVERLAY_MIXINS": "release ccache compile-commands lld",
+        "CCACHE_DIR": "/tmp/.ccache"
     },
     "runArgs": [
         "--net=host",
@@ -46,10 +45,10 @@
         "source=${localEnv:HOME}/dotfiles,target=/home/bar/dotfiles,type=bind",
         "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
         "source=/dev/dri,target=/dev/dri,type=bind,consistency=cached",
-        "source=rclcpp-workspace-${devcontainerId},target=/home/ws,type=volume",
-        "source=ccache-${devcontainerId},target=/tmp/.ccache,type=volume"
+        "source=ccache-${devcontainerId},target=/tmp/.ccache,type=volume",
+        "source=overlay-${devcontainerId},target=/opt/overlay_ws,type=volume"
     ],
-    "onCreateCommand": "bash .devcontainer/on-create-command.sh",
-    "updateContentCommand": "bash .devcontainer/update-content-command.sh",
-    "postCreateCommand": "bash .devcontainer/post-create-command.sh"
+    "onCreateCommand": ".devcontainer/on-create-command.sh",
+    "updateContentCommand": ".devcontainer/update-content-command.sh",
+    "postCreateCommand": ".devcontainer/post-create-command.sh"
 }
