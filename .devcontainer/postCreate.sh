@@ -16,9 +16,12 @@ ln -sfn "$HOME/src/ros2/rclcpp" "$WS/src/ros2/rclcpp"
 cd "$WS"
 
 # vcs import — re-run only when upstream ros2.repos changes
-repos_hash=$(curl -fsSL "$ROS2_REPOS_URL" | sha256sum | cut -d' ' -f1)
+repos_file=$(mktemp)
+trap 'rm -f "$repos_file"' EXIT
+curl -fsSL "$ROS2_REPOS_URL" -o "$repos_file"
+repos_hash=$(sha256sum "$repos_file" | cut -d' ' -f1)
 if [ ! -f "$WS/.vcs-imported" ] || [ "$(cat "$WS/.vcs-imported")" != "$repos_hash" ]; then
-    vcs import --input "$ROS2_REPOS_URL" --skip-existing src
+    vcs import --input "$repos_file" --skip-existing src
     echo "$repos_hash" > "$WS/.vcs-imported"
 fi
 
