@@ -48,6 +48,6 @@ if [ -n "$BUILD_PACKAGES" ]; then
     . /opt/ros/rolling/setup.sh
     colcon build \
         --symlink-install \
-        --mixin release ccache compile-commands lld \
+        --mixin $OVERLAY_MIXINS \
         --packages-select ${BUILD_PACKAGES}
 fi
