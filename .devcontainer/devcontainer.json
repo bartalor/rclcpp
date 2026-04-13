@@ -2,10 +2,7 @@
     "name": "rclcpp-dev",
     "build": {
         "dockerfile": "Dockerfile",
-        "target": "dever",
-        "args": {
-            "USERNAME": "bar"
-        }
+        "target": "dever"
     },
     "workspaceFolder": "/opt/overlay_ws/src/rclcpp",
     "workspaceMount": "source=${localEnv:HOME}/src/ros2/rclcpp,target=/opt/overlay_ws/src/rclcpp,type=bind",
@@ -39,10 +36,9 @@
         "-e", "DISPLAY=${env:DISPLAY}"
     ],
     "mounts": [
-        "source=${localEnv:HOME}/.claude,target=/home/bar/.claude,type=bind",
-        "source=${localEnv:HOME}/.claude/settings.json,target=/home/bar/.claude/settings.json,type=bind,readonly",
-        "source=${localEnv:HOME}/.config/git/ignore,target=/home/bar/.config/git/ignore,type=bind,readonly",
-        "source=${localEnv:HOME}/dotfiles,target=/home/bar/dotfiles,type=bind",
+        "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind",
+        "source=${localEnv:HOME}/.claude/settings.json,target=/root/.claude/settings.json,type=bind,readonly",
+        "source=${localEnv:HOME}/.config/git/ignore,target=/root/.config/git/ignore,type=bind,readonly",
         "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
         "source=/dev/dri,target=/dev/dri,type=bind,consistency=cached",
         "source=ccache-${devcontainerId},target=/tmp/.ccache,type=volume",
