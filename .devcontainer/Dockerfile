@@ -70,11 +70,13 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
 COPY --from=cacher $UNDERLAY_WS ./
 ARG UNDERLAY_MIXINS="release ccache lld"
 ARG CCACHE_DIR="$UNDERLAY_WS/.ccache"
+ENV MAKEFLAGS="-j2"
 RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
     colcon cache lock && \
     colcon build \
       --symlink-install \
       --mixin $UNDERLAY_MIXINS \
+      --parallel-workers 4 \
       --packages-up-to rclcpp \
       --event-handlers console_direct+
 
