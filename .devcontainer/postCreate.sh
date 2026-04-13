@@ -1,31 +1,38 @@
 #!/bin/bash
-set -e
+set -eo pipefail
 
-# Ensure /home/ws ownership (volume may already have data)
-sudo mkdir -p /home/ws/src/ros2
-sudo chown -R "$(whoami)" /home/ws
+ROS2_REPOS_URL="https://raw.githubusercontent.com/ros2/ros2/rolling/ros2.repos"
+WS="/home/ws"
+
+# Ensure /home/ws exists and is owned by current user
+sudo mkdir -p "$WS/src/ros2"
+if [ "$(stat -c '%U' "$WS")" != "$(whoami)" ]; then
+    sudo chown -R "$(whoami)" "$WS"
+fi
 
 # Symlink rclcpp source into workspace
-ln -sfn "$HOME/src/ros2/rclcpp" /home/ws/src/ros2/rclcpp
+ln -sfn "$HOME/src/ros2/rclcpp" "$WS/src/ros2/rclcpp"
 
-cd /home/ws
+cd "$WS"
 
-# Only run expensive vcs import if not already done
-if [ ! -f /home/ws/.vcs-imported ]; then
-    vcs import --input https://raw.githubusercontent.com/ros2/ros2/rolling/ros2.repos --skip-existing src
-    touch /home/ws/.vcs-imported
+# vcs import — re-run only when upstream ros2.repos changes
+repos_hash=$(curl -fsSL "$ROS2_REPOS_URL" | sha256sum | cut -d' ' -f1)
+if [ ! -f "$WS/.vcs-imported" ] || [ "$(cat "$WS/.vcs-imported")" != "$repos_hash" ]; then
+    vcs import --input "$ROS2_REPOS_URL" --skip-existing src
+    echo "$repos_hash" > "$WS/.vcs-imported"
 fi
 
 # rosdep install — apt packages live in the container, not the volume.
-# Must run on every rebuild, but it's fast when packages are already installed.
+# Must run on every rebuild since container filesystem is ephemeral.
 sudo apt-get update
 rosdep update
 rosdep install --from-paths src --ignore-src -y
 
-# Only run colcon build if not already done
+# colcon build — only run initial build if not already done.
+# Subsequent rebuilds after code changes should be run manually.
 . /opt/ros/rolling/setup.sh
-if [ ! -f /home/ws/.colcon-built ]; then
+if [ ! -f "$WS/.colcon-built" ]; then
     colcon build --symlink-install --packages-up-to rclcpp \
         --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-    touch /home/ws/.colcon-built
+    touch "$WS/.colcon-built"
 fi
