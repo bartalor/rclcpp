@@ -42,7 +42,8 @@
         "source=${localEnv:HOME}/.config/git/ignore,target=/home/bar/.config/git/ignore,type=bind,readonly",
         "source=${localEnv:HOME}/dotfiles,target=/home/bar/dotfiles,type=bind",
         "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
-        "source=/dev/dri,target=/dev/dri,type=bind,consistency=cached"
+        "source=/dev/dri,target=/dev/dri,type=bind,consistency=cached",
+        "source=rclcpp-workspace,target=/home/ws,type=volume"
     ],
     "postCreateCommand": "bash .devcontainer/postCreate.sh"
 }
