@@ -30,7 +30,8 @@
         "ROS_DOMAIN_ID": "42"
     },
     "remoteEnv": {
-        "CCACHE_DIR": "/tmp/.ccache"
+        "CCACHE_DIR": "/tmp/.ccache",
+        "OVERLAY_MIXINS": "release ccache compile-commands lld"
     },
     "runArgs": [
         "--net=host",
