@@ -20,6 +20,12 @@ RUN if id -u $USER_UID ; then userdel "$(id -un $USER_UID)" ; fi \
         python3-rosdep \
         python3-vcstool \
         git \
+        ccache \
+        lld \
+    && pip3 install --break-system-packages \
+        git+https://github.com/ruffsl/colcon-cache.git@a937541bfc496c7a267db7ee9d6cceca61e470ca \
+    && colcon mixin update default \
+    && colcon metadata update \
     && echo "$USERNAME ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME \
     && rm -rf /var/lib/apt/lists/*
