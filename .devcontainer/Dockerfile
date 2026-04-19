@@ -30,7 +30,7 @@ RUN echo '\
 APT::Install-Recommends "0";\n\
 APT::Install-Suggests "0";\n\
 ' > /etc/apt/apt.conf.d/01norecommend
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONUNBUFFERED=1
 
 # install CI dependencies
 RUN apt-get update && \
@@ -56,9 +56,10 @@ RUN apt-get update && \
 
 # install underlay dependencies
 ARG UNDERLAY_WS
-ENV UNDERLAY_WS $UNDERLAY_WS
+ENV UNDERLAY_WS=$UNDERLAY_WS
 WORKDIR $UNDERLAY_WS
 COPY --from=cacher /tmp/$UNDERLAY_WS ./
+ARG RTI_NC_LICENSE_ACCEPTED=yes
 RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
     apt-get update && rosdep install -q -y \
       --from-paths src \
@@ -87,5 +88,5 @@ RUN mv /etc/apt/apt.conf.d/docker-clean /etc/apt/
 
 # source underlay for shell
 ARG OVERLAY_WS
-ENV OVERLAY_WS $OVERLAY_WS
+ENV OVERLAY_WS=$OVERLAY_WS
 RUN echo "source \"$UNDERLAY_WS/install/setup.bash\"" >> /etc/bash.bashrc
