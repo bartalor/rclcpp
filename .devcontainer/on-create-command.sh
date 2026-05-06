@@ -10,6 +10,10 @@ apt-get update
 rosdep install -q -y \
     --from-paths $OVERLAY_WS/src \
     --ignore-src \
-    --skip-keys "ament_cmake_google_benchmark test_msgs"
+    --dependency-types=build \
+    --dependency-types=buildtool \
+    --dependency-types=build_export \
+    --dependency-types=buildtool_export \
+    --dependency-types=exec
 
 .devcontainer/update-content-command.sh
