@@ -10,7 +10,8 @@
             "extensions": [
                 "llvm-vs-code-extensions.vscode-clangd",
                 "ms-vscode.cmake-tools",
-                "anthropic.claude-code"
+                "anthropic.claude-code",
+                "mhutchie.git-graph"
             ],
             "settings": {
                 "clangd.arguments": [
