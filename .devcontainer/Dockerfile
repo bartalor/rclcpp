@@ -12,12 +12,19 @@ ENV PYTHONUNBUFFERED=1
 
 # install dev tools (deps come from rosdep at container start)
 RUN apt-get update && \
+    apt-get install -y curl gnupg && \
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+        | gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+        > /etc/apt/sources.list.d/github-cli.list && \
+    apt-get update && \
     apt-get upgrade -y --with-new-pkgs && \
     apt-get install -y \
       bash-completion \
       build-essential \
       cmake \
       gdb \
+      gh \
       clangd \
       git \
       ccache \
