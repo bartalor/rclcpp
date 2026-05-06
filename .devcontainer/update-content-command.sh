@@ -47,4 +47,5 @@ echo BUILD_PACKAGES: $BUILD_PACKAGES
 colcon build \
     --symlink-install \
     --mixin $OVERLAY_MIXINS \
-    --packages-select ${BUILD_PACKAGES}
+    --packages-select ${BUILD_PACKAGES} \
+    --cmake-args -DBUILD_TESTING=OFF
