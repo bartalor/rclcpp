@@ -68,7 +68,7 @@ RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
 
 # build underlay source
 COPY --from=cacher $UNDERLAY_WS ./
-ARG UNDERLAY_MIXINS="release ccache lld"
+ARG UNDERLAY_MIXINS="release ccache"
 ARG CCACHE_DIR="$UNDERLAY_WS/.ccache"
 RUN MAKEFLAGS="-j2" && export MAKEFLAGS && \
     . /opt/ros/$ROS_DISTRO/setup.sh && \
