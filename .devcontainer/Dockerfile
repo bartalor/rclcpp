@@ -39,5 +39,12 @@ RUN apt-get update && \
 # keep apt lists for runtime rosdep install
 RUN mv /etc/apt/apt.conf.d/docker-clean /etc/apt/
 
+# allow ubuntu user passwordless sudo for lifecycle scripts
+RUN echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ubuntu && \
+    chmod 0440 /etc/sudoers.d/ubuntu
+
 ARG OVERLAY_WS
 ENV OVERLAY_WS=$OVERLAY_WS
+
+# named volume mount inherits ownership from this dir on first creation
+RUN mkdir -p $OVERLAY_WS && chown ubuntu:ubuntu $OVERLAY_WS
