@@ -47,5 +47,6 @@
     ],
     "onCreateCommand": ".devcontainer/on-create-command.sh",
     "updateContentCommand": ".devcontainer/update-content-command.sh",
-    "postCreateCommand": ".devcontainer/post-create-command.sh"
+    "postCreateCommand": ".devcontainer/post-create-command.sh",
+    "remoteUser": "ubuntu"
 }
