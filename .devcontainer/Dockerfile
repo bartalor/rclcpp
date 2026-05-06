@@ -14,6 +14,7 @@ ENV PYTHONUNBUFFERED=1
 RUN apt-get update && \
     apt-get upgrade -y --with-new-pkgs && \
     apt-get install -y \
+      bash-completion \
       build-essential \
       cmake \
       gdb \
