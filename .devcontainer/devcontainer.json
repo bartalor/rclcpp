@@ -37,9 +37,9 @@
     ],
     "mounts": [
         "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
-        "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind",
-        "source=${localEnv:HOME}/.claude/settings.json,target=/root/.claude/settings.json,type=bind,readonly",
-        "source=${localEnv:HOME}/.config/git/ignore,target=/root/.config/git/ignore,type=bind,readonly",
+        "source=${localEnv:HOME}/.claude,target=/home/ubuntu/.claude,type=bind",
+        "source=${localEnv:HOME}/.claude/settings.json,target=/home/ubuntu/.claude/settings.json,type=bind,readonly",
+        "source=${localEnv:HOME}/.config/git/ignore,target=/home/ubuntu/.config/git/ignore,type=bind,readonly",
         "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
         "source=/dev/dri,target=/dev/dri,type=bind,consistency=cached",
         "source=ccache-${devcontainerId},target=/tmp/.ccache,type=volume",
