@@ -1,8 +1,7 @@
 {
     "name": "rclcpp-dev",
     "build": {
-        "dockerfile": "Dockerfile",
-        "target": "dever"
+        "dockerfile": "Dockerfile"
     },
     "workspaceFolder": "/opt/overlay_ws/src/rclcpp",
     "workspaceMount": "source=${localEnv:HOME}/src/ros2/rclcpp,target=/opt/overlay_ws/src/rclcpp,type=bind",

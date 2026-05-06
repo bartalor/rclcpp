@@ -43,7 +43,7 @@ then
 fi
 echo BUILD_PACKAGES: $BUILD_PACKAGES
 
-. $UNDERLAY_WS/install/setup.sh
+. /opt/ros/$ROS_DISTRO/setup.sh
 colcon build \
     --symlink-install \
     --mixin $OVERLAY_MIXINS \
