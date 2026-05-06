@@ -26,9 +26,6 @@ RUN apt-get update && \
       python3-rosdep \
     && pip3 install --break-system-packages \
       git+https://github.com/ruffsl/colcon-cache.git@a937541bfc496c7a267db7ee9d6cceca61e470ca \
-    && rosdep update \
-    && colcon mixin update \
-    && colcon metadata update \
     && rm -rf /var/lib/apt/lists/*
 
 # keep apt lists for runtime rosdep install
