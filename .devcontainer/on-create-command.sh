@@ -17,8 +17,3 @@ rosdep install -q -y \
     --dependency-types=exec
 
 .devcontainer/update-content-command.sh
-
-# expose source under the host's path so tooling (eg. claude) keys the
-# project the same way inside and outside the container
-mkdir -p "$(dirname "$HOST_WORKSPACE_FOLDER")"
-ln -sfn "$OVERLAY_WS/src/rclcpp" "$HOST_WORKSPACE_FOLDER"
