@@ -9,6 +9,7 @@ rosdep update
 apt-get update
 rosdep install -q -y \
     --from-paths $OVERLAY_WS/src \
-    --ignore-src
+    --ignore-src \
+    --skip-keys "ament_cmake_google_benchmark test_msgs"
 
 .devcontainer/update-content-command.sh
