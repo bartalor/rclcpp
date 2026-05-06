@@ -3,8 +3,8 @@
     "build": {
         "dockerfile": "Dockerfile"
     },
-    "workspaceFolder": "/opt/overlay_ws/src/rclcpp",
-    "workspaceMount": "source=${localEnv:HOME}/src/ros2/rclcpp,target=/opt/overlay_ws/src/rclcpp,type=bind",
+    "workspaceFolder": "${localWorkspaceFolder}",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/opt/overlay_ws/src/rclcpp,type=bind",
     "customizations": {
         "vscode": {
             "extensions": [
@@ -22,7 +22,8 @@
     "containerEnv": {
         "DISPLAY": "unix:0",
         "ROS_AUTOMATIC_DISCOVERY_RANGE": "LOCALHOST",
-        "ROS_DOMAIN_ID": "42"
+        "ROS_DOMAIN_ID": "42",
+        "HOST_WORKSPACE_FOLDER": "${localWorkspaceFolder}"
     },
     "remoteEnv": {
         "OVERLAY_MIXINS": "release ccache compile-commands lld",
