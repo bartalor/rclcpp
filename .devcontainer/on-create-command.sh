@@ -5,7 +5,7 @@ git config --global --add safe.directory "*"
 
 # install overlay deps from mounted source
 . /opt/ros/$ROS_DISTRO/setup.sh
-sudo rosdep update --rosdistro=$ROS_DISTRO
+rosdep update --rosdistro=$ROS_DISTRO
 sudo apt-get update
 sudo rosdep install -q -y \
     --from-paths $OVERLAY_WS/src \
