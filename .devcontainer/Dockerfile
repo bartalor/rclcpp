@@ -55,5 +55,5 @@ RUN mkdir -p $OVERLAY_WS /tmp/.ccache && \
     chown ubuntu:ubuntu $OVERLAY_WS /tmp/.ccache
 
 # pre-create user dirs so docker auto-created bind-mount parents don't end up root-owned
-RUN mkdir -p /home/ubuntu/.config /home/ubuntu/.claude && \
+RUN mkdir -p /home/ubuntu/.config/git /home/ubuntu/.claude && \
     chown -R ubuntu:ubuntu /home/ubuntu/.config /home/ubuntu/.claude
