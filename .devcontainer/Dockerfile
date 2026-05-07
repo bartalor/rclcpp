@@ -29,6 +29,7 @@ RUN apt-get update && \
       gh \
       clangd \
       git \
+      openssh-client \
       ccache \
       lld \
       python3-pip \
