@@ -21,6 +21,7 @@ from git import GitCommandError, Repo
 PERSONAL_PATHS = [
     ".devcontainer",
     ".claude",
+    "scripts",
     "CLAUDE.md",
 ]
 
