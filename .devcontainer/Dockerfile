@@ -53,3 +53,7 @@ ENV OVERLAY_WS=$OVERLAY_WS
 # named volume mounts inherit ownership from these dirs on first creation
 RUN mkdir -p $OVERLAY_WS /tmp/.ccache && \
     chown ubuntu:ubuntu $OVERLAY_WS /tmp/.ccache
+
+# pre-create user dirs so docker auto-created bind-mount parents don't end up root-owned
+RUN mkdir -p /home/ubuntu/.config /home/ubuntu/.claude && \
+    chown -R ubuntu:ubuntu /home/ubuntu/.config /home/ubuntu/.claude
