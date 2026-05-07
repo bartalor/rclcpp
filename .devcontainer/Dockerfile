@@ -1,4 +1,4 @@
-ARG FROM_IMAGE=ros:rolling
+ARG FROM_IMAGE=ros:rolling@sha256:fb8469ba130be60dde6561fb194a1bf43063a2a492ee01db9866d851ece0cad6
 ARG OVERLAY_WS=/opt/overlay_ws
 
 FROM $FROM_IMAGE
