@@ -8,8 +8,7 @@ Workflow:
   2. Return to the original branch and rebase onto bar/devcontainer. Push if
      the branch has a remote tracking ref.
 
-Refuses to run if the rebase would touch files that are currently dirty
-(personal or otherwise) — those would be lost.
+Refuses to run if non-personal files are dirty (rebase needs a clean tree).
 """
 
 import argparse
@@ -40,10 +39,8 @@ def is_personal(path: str) -> bool:
 def changed_paths(repo: Repo) -> list[str]:
     """Return all paths with working-tree or index changes, plus untracked files."""
     paths: set[str] = set()
-    # Modified/deleted/renamed in working tree vs index.
     for diff in repo.index.diff(None):
         paths.add(diff.b_path or diff.a_path)
-    # Staged: index vs HEAD.
     for diff in repo.index.diff("HEAD"):
         paths.add(diff.b_path or diff.a_path)
     paths.update(repo.untracked_files)
@@ -61,6 +58,20 @@ def has_upstream(repo: Repo, branch_name: str) -> bool:
         return False
 
 
+def commits_ahead(repo: Repo, ahead: str, behind: str) -> int:
+    """How many commits `ahead` has that `behind` doesn't."""
+    return sum(1 for _ in repo.iter_commits(f"{behind}..{ahead}"))
+
+
+def prompt_yes_no(question: str) -> bool:
+    while True:
+        ans = input(f"{question} [y/n]: ").strip().lower()
+        if ans in ("y", "yes"):
+            return True
+        if ans in ("n", "no"):
+            return False
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("-m", "--message", required=True,
@@ -75,9 +86,35 @@ def main() -> int:
               file=sys.stderr)
         return 1
 
+    ahead = commits_ahead(repo, PERSONAL_BRANCH, current)
+    if ahead > 0:
+        print(f"{PERSONAL_BRANCH} is {ahead} commit(s) ahead of {current}.")
+        if not prompt_yes_no(f"Rebase {current} onto {PERSONAL_BRANCH} first?"):
+            print("Aborted.")
+            return 1
+        g = repo.git
+        try:
+            g.rebase(PERSONAL_BRANCH)
+        except GitCommandError as e:
+            print("Pre-rebase failed; aborting.", file=sys.stderr)
+            print(e.stderr or str(e), file=sys.stderr)
+            try:
+                g.rebase("--abort")
+            except GitCommandError:
+                pass
+            return 1
+        print(f"Rebased {current} onto {PERSONAL_BRANCH}")
+
     all_changes = changed_paths(repo)
     personal_changes = [p for p in all_changes if is_personal(p)]
     other_changes = [p for p in all_changes if not is_personal(p)]
+
+    if other_changes:
+        print("Refusing: non-personal files are dirty (rebase needs a clean tree):",
+              file=sys.stderr)
+        for p in other_changes:
+            print(f"  {p}", file=sys.stderr)
+        return 1
 
     if not personal_changes:
         print("No personal-files changes to sync.")
@@ -86,89 +123,39 @@ def main() -> int:
     print(f"Personal changes ({len(personal_changes)}):")
     for p in personal_changes:
         print(f"  {p}")
-    if other_changes:
-        print(f"Other changes left untouched ({len(other_changes)}):")
-        for p in other_changes:
-            print(f"  {p}")
-
-    # Upfront conflict check: if any "other" change is in a path that
-    # bar/devcontainer also modifies relative to the merge-base, the rebase
-    # would touch a dirty file. Refuse.
-    if other_changes:
-        merge_base = repo.merge_base("HEAD", PERSONAL_BRANCH)[0]
-        diff_paths = {
-            (d.b_path or d.a_path)
-            for d in merge_base.diff(repo.heads[PERSONAL_BRANCH].commit)
-        }
-        risky = [p for p in other_changes if p in diff_paths]
-        if risky:
-            print("Refusing: rebase would touch dirty files:", file=sys.stderr)
-            for p in risky:
-                print(f"  {p}", file=sys.stderr)
-            return 1
 
     g = repo.git
-    stash_pushed = False
+    g.checkout(PERSONAL_BRANCH)
+    g.add("--", *personal_changes)
+    g.commit("-m", args.message)
+    print(f"Committed on {PERSONAL_BRANCH}: {args.message}")
+
+    if has_upstream(repo, PERSONAL_BRANCH):
+        print(g.push())
+        print(f"Pushed {PERSONAL_BRANCH}")
+    else:
+        print(f"No upstream for {PERSONAL_BRANCH}; skipping push")
+
+    g.checkout(current)
 
     try:
-        # Stash everything (incl. untracked) so checkout is clean.
-        g.stash("push", "--include-untracked", "-m", f"sync-personal: from {current}")
-        stash_pushed = True
-
-        g.checkout(PERSONAL_BRANCH)
-        g.stash("pop")
-        stash_pushed = False
-
-        # Stage personal paths only.
-        g.add("--", *personal_changes)
-        g.commit("-m", args.message)
-        print(f"Committed on {PERSONAL_BRANCH}: {args.message}")
-
-        if has_upstream(repo, PERSONAL_BRANCH):
-            print(g.push())
-            print(f"Pushed {PERSONAL_BRANCH}")
-        else:
-            print(f"No upstream for {PERSONAL_BRANCH}; skipping push")
-
-        # Re-stash leftovers so we can switch branches.
-        leftover = changed_paths(repo)
-        if leftover:
-            g.stash("push", "--include-untracked", "-m",
-                    f"sync-personal: leftover from {current}")
-            stash_pushed = True
-
-        g.checkout(current)
-
-        if stash_pushed:
-            g.stash("pop")
-            stash_pushed = False
-
+        g.rebase(PERSONAL_BRANCH)
+    except GitCommandError as e:
+        print("Rebase failed; aborting.", file=sys.stderr)
+        print(e.stderr or str(e), file=sys.stderr)
         try:
-            g.rebase(PERSONAL_BRANCH)
-        except GitCommandError as e:
-            print("Rebase failed; aborting.", file=sys.stderr)
-            print(e.stderr or str(e), file=sys.stderr)
-            try:
-                g.rebase("--abort")
-            except GitCommandError:
-                pass
-            return 1
+            g.rebase("--abort")
+        except GitCommandError:
+            pass
+        return 1
 
-        print(f"Rebased {current} onto {PERSONAL_BRANCH}")
+    print(f"Rebased {current} onto {PERSONAL_BRANCH}")
 
-        if has_upstream(repo, current):
-            print(g.push("--force-with-lease"))
-            print(f"Pushed {current} (force-with-lease)")
-        else:
-            print(f"No upstream for {current}; skipping push")
-
-    finally:
-        if stash_pushed:
-            print("Cleaning up: popping stash", file=sys.stderr)
-            try:
-                g.stash("pop")
-            except GitCommandError as e:
-                print(e.stderr or str(e), file=sys.stderr)
+    if has_upstream(repo, current):
+        print(g.push("--force-with-lease"))
+        print(f"Pushed {current} (force-with-lease)")
+    else:
+        print(f"No upstream for {current}; skipping push")
 
     return 0
 
