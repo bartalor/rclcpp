@@ -14,6 +14,7 @@ sudo rosdep install -q -y \
     --dependency-types=buildtool \
     --dependency-types=build_export \
     --dependency-types=buildtool_export \
-    --dependency-types=exec
+    --dependency-types=exec \
+    --dependency-types=test
 
 .devcontainer/update-content-command.sh
