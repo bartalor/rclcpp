@@ -1,6 +1,8 @@
 # Branching
 
-`bar/devcontainer` is the personal-preferences root: `.devcontainer/`, `.vscode/`, `CLAUDE.md`, etc. **Always create feature branches off `bar/devcontainer`**, never off `upstream/rolling`. The branch keeps the personal files; only the upstream PR excludes them.
+`bar/devcontainer` is the personal-preferences root: `.devcontainer/`, `.vscode/`, `scripts/`, `CLAUDE.md`, etc. **Always create feature branches off `bar/devcontainer`**, never off `upstream/rolling`. The branch keeps the personal files; only the upstream PR excludes them.
+
+Use `python3 scripts/sync-personal.py -m "..."` to sync personal-file edits made on a feature branch: it commits them on `bar/devcontainer`, pushes, then rebases the feature branch on top and pushes that too. The script's `PERSONAL_PATHS` list is the source of truth for what counts as personal.
 
 # Persistence
 
