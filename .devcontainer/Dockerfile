@@ -33,8 +33,16 @@ RUN apt-get update && \
       lld \
       python3-pip \
       python3-colcon-common-extensions \
+      python3-colcon-mixin \
       python3-rosdep \
     && rm -rf /var/lib/apt/lists/*
+
+# share the colcon mixin index (release, ccache, compile-commands, lld, ...)
+# system-wide via COLCON_HOME so root and ubuntu read the same config.
+ENV COLCON_HOME=/etc/colcon
+RUN colcon mixin add default https://raw.githubusercontent.com/colcon/colcon-mixin-repository/master/index.yaml && \
+    colcon mixin update default && \
+    chmod -R a+rX /etc/colcon
 
 # colcon-cache (third-party plugin, pinned to a known-good revision)
 RUN pip3 install --break-system-packages \
