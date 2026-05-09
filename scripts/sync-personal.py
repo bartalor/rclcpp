@@ -428,7 +428,8 @@ def commit_personal(repo: Repo, message: str) -> int:
 
 
 def rebase_on_personal(repo: Repo) -> int:
-    """Rebase every other local branch onto bar/devcontainer.
+    """Rebase every other local branch onto bar/devcontainer, then push
+    bar/devcontainer to align origin with the local tree.
 
     Prechecks: clean tree, bar/devcontainer exists. Tree-aware rebase
     aborts pre-mutation on any tree problem.
@@ -450,7 +451,27 @@ def rebase_on_personal(repo: Repo) -> int:
         print("Refusing: nothing to rebase.", file=sys.stderr)
         return 1
 
-    return _run_tree_rebase(repo, tree, PERSONAL_BRANCH, require_fresh=False)
+    rc = _run_tree_rebase(repo, tree, PERSONAL_BRANCH, require_fresh=False)
+    if rc != 0:
+        return rc
+
+    return push_branch(repo, PERSONAL_BRANCH)
+
+
+def push_branch(repo: Repo, branch: str) -> int:
+    """Checkout and push `branch`. No-op if it has no upstream. Returns rc."""
+    if not has_upstream(repo, branch):
+        print(f"\n{branch}: no upstream; skipping push")
+        return 0
+    print(f"\nPushing {branch}...")
+    try:
+        repo.git.checkout(branch)
+        repo.git.push("--force-with-lease")
+    except GitCommandError as e:
+        print(f"Push failed: {e.stderr or e}", file=sys.stderr)
+        return 1
+    print(f"Pushed {branch} (force-with-lease)")
+    return 0
 
 
 def rebase_on_rolling(repo: Repo) -> int:
