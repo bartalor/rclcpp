@@ -230,26 +230,41 @@ def _descendants_of(tree: dict[str, str], branch: str) -> list[str]:
     return out
 
 
+def _dry_walk_tree(repo: Repo, tree: dict[str, str], new_base: str,
+                   branch_point: dict[str, str]) -> list[str]:
+    """Return branches in `tree` that actually need rebasing, in topo order.
+
+    A branch is a no-op iff its current branch-point equals what its parent's
+    new tip will be. Walks topologically so chained no-ops are detected:
+    parent no-op => parent's new tip == its old tip => child sees the same
+    SHA it's already at.
+    """
+    new_base_sha = repo.commit(new_base).hexsha
+    old_tip = {b: repo.heads[b].commit.hexsha for b in tree}
+    projected_new_tip: dict[str, str] = {}
+    todo: list[str] = []
+    for b in _topo_sort_tree(tree, new_base):
+        parent_ref = tree[b]
+        new_parent_sha = (new_base_sha if parent_ref == new_base
+                          else projected_new_tip[parent_ref])
+        if branch_point[b] == new_parent_sha:
+            projected_new_tip[b] = old_tip[b]
+        else:
+            projected_new_tip[b] = "<rebased>"
+            todo.append(b)
+    return todo
+
+
 def rebase_tree(repo: Repo, log_fh: TextIO, tree: dict[str, str],
-                new_base: str, require_fresh: bool) -> tuple[bool, list[str]]:
+                new_base: str,
+                branch_point: dict[str, str]) -> tuple[bool, list[str]]:
     """Rebase every branch in `tree` onto its declared parent's new tip.
 
-    Pre-checks the entire tree; aborts pre-mutation on any failure. On any
-    rebase OR push failure mid-run, breaks immediately — descendants are
-    marked failed and not touched.
-
-    require_fresh: see precheck_rebase_tree. Pass True for --rebase-on-rolling
-    (any staleness is an error); False for --rebase-on-personal (staleness
-    is the input — bring children forward to parent's current tip).
+    Caller must have already run precheck_rebase_tree and obtained
+    `branch_point`. No-op branches (branch-point already at parent's new tip)
+    are skipped silently. On any rebase or push failure, breaks immediately —
+    descendants are marked failed and not touched.
     """
-    problems, branch_point = precheck_rebase_tree(repo, tree, new_base,
-                                                  require_fresh)
-    if problems:
-        print("Pre-check failed; refusing to touch any branch:", file=sys.stderr)
-        for p in problems:
-            print(f"  - {p}", file=sys.stderr)
-        return False, []
-
     g = repo.git
     new_base_sha = repo.commit(new_base).hexsha
     order = _topo_sort_tree(tree, new_base)
@@ -264,15 +279,14 @@ def rebase_tree(repo: Repo, log_fh: TextIO, tree: dict[str, str],
         new_parent_sha = (new_base_sha if parent_ref == new_base
                           else new_tip[parent_ref])
 
+        if old_base_sha == new_parent_sha:
+            new_tip[b] = old_tip[b]
+            continue
+
         print(f"\n=== {b} ===")
         print(f"  parent: {parent_ref}")
         print(f"  pre-rebase: {old_tip[b][:8]}")
         print(f"  --onto {new_parent_sha[:8]} {old_base_sha[:8]}")
-
-        if old_base_sha == new_parent_sha:
-            print("  branch-point already at parent's new tip; nothing to do")
-            new_tip[b] = old_tip[b]
-            continue
 
         ok = rebase_branch(repo, log_fh, b,
                            ["--onto", new_parent_sha, old_base_sha, b],
@@ -451,27 +465,49 @@ def rebase_on_personal(repo: Repo) -> int:
         print("Refusing: nothing to rebase.", file=sys.stderr)
         return 1
 
-    rc = _run_tree_rebase(repo, tree, PERSONAL_BRANCH, require_fresh=False)
+    rc, did_rebase = _run_tree_rebase(repo, tree, PERSONAL_BRANCH,
+                                      require_fresh=False)
     if rc != 0:
         return rc
 
-    return push_branch(repo, PERSONAL_BRANCH)
+    push_rc, did_push = push_if_ahead(repo, PERSONAL_BRANCH)
+    if push_rc != 0:
+        return push_rc
+
+    if not did_rebase and not did_push:
+        print("Nothing to do.")
+    return 0
 
 
-def push_branch(repo: Repo, branch: str) -> int:
-    """Checkout and push `branch`. No-op if it has no upstream. Returns rc."""
+def push_if_ahead(repo: Repo, branch: str) -> tuple[int, bool]:
+    """Push `branch` with --force-with-lease iff its local tip is ahead of or
+    diverged from origin. Silent no-op if no upstream or already in sync.
+    Returns (rc, did_push)."""
     if not has_upstream(repo, branch):
-        print(f"\n{branch}: no upstream; skipping push")
-        return 0
+        return 0, False
+    try:
+        local_sha = repo.heads[branch].commit.hexsha
+        upstream = repo.heads[branch].tracking_branch()
+        if upstream is None:
+            return 0, False
+        remote_sha = upstream.commit.hexsha
+    except Exception as e:
+        print(f"Could not compare {branch} to its upstream: {e}",
+              file=sys.stderr)
+        return 1, False
+
+    if local_sha == remote_sha:
+        return 0, False
+
     print(f"\nPushing {branch}...")
     try:
         repo.git.checkout(branch)
         repo.git.push("--force-with-lease")
     except GitCommandError as e:
         print(f"Push failed: {e.stderr or e}", file=sys.stderr)
-        return 1
+        return 1, False
     print(f"Pushed {branch} (force-with-lease)")
-    return 0
+    return 0, True
 
 
 def rebase_on_rolling(repo: Repo) -> int:
@@ -510,22 +546,32 @@ def rebase_on_rolling(repo: Repo) -> int:
         print("Refusing: nothing to rebase.", file=sys.stderr)
         return 1
 
-    return _run_tree_rebase(repo, tree, UPSTREAM_REF, require_fresh=True)
+    rc, did_rebase = _run_tree_rebase(repo, tree, UPSTREAM_REF,
+                                      require_fresh=True)
+    if rc == 0 and not did_rebase:
+        print("Nothing to do.")
+    return rc
 
 
 def _run_tree_rebase(repo: Repo, tree: dict[str, str], new_base: str,
-                     require_fresh: bool) -> int:
+                     require_fresh: bool) -> tuple[int, bool]:
     """Shared driver: precheck, then rebase, then restore branch.
 
-    Opens the undo log AFTER the precheck so an abort doesn't write a
-    near-empty file.
+    Returns (rc, did_anything). rc=0 on success. did_anything=True iff at
+    least one branch was actually rebased. Silent (no output, no log file)
+    when there is nothing to rebase.
     """
-    problems, _ = precheck_rebase_tree(repo, tree, new_base, require_fresh)
+    problems, branch_point = precheck_rebase_tree(repo, tree, new_base,
+                                                  require_fresh)
     if problems:
         print("Pre-check failed; refusing to touch any branch:", file=sys.stderr)
         for p in problems:
             print(f"  - {p}", file=sys.stderr)
-        return 1
+        return 1, False
+
+    todo = _dry_walk_tree(repo, tree, new_base, branch_point)
+    if not todo:
+        return 0, False
 
     original = repo.active_branch.name
     log_path, log_fh = open_undo_log(repo)
@@ -539,8 +585,9 @@ def _run_tree_rebase(repo: Repo, tree: dict[str, str], new_base: str,
     for b, p in tree.items():
         print(f"  {b} -> {p}")
     print()
+    print(f"=== Branches to rebase: {', '.join(todo)} ===")
 
-    ok, failed = rebase_tree(repo, log_fh, tree, new_base, require_fresh)
+    ok, failed = rebase_tree(repo, log_fh, tree, new_base, branch_point)
 
     try:
         repo.git.checkout(original)
@@ -553,7 +600,7 @@ def _run_tree_rebase(repo: Repo, tree: dict[str, str], new_base: str,
 
     if failed:
         print(f"\nFailed: {', '.join(failed)}", file=sys.stderr)
-    return 0 if ok else 1
+    return (0 if ok else 1), True
 
 
 def main() -> int:
