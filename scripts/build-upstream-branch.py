@@ -90,7 +90,13 @@ def build_clean_branch(repo: Repo, dev_branch: str, clean_branch: str) -> int:
               "leaving it untouched.")
         return 1
 
-    head_before = repo.head.commit.hexsha if not repo.head.is_detached else None
+    existing_branches = [h.name for h in repo.heads]
+    prior_tip = (repo.heads[clean_branch].commit.hexsha
+                 if clean_branch in existing_branches else None)
+    if prior_tip is not None:
+        print(f"\nNote: {clean_branch} already exists at {prior_tip[:8]}; "
+              "will overwrite (branch is recomputed from -dev each run).")
+
     original_branch = (repo.active_branch.name
                        if not repo.head.is_detached else None)
 
@@ -120,8 +126,19 @@ def build_clean_branch(repo: Repo, dev_branch: str, clean_branch: str) -> int:
         new_tip = repo.head.commit.hexsha
         print(f"\n{clean_branch} -> {new_tip[:8]}")
 
-        existing = [h.name for h in repo.heads]
-        if clean_branch in existing:
+        if prior_tip is not None:
+            if prior_tip == new_tip:
+                print(f"  unchanged (already at {new_tip[:8]})")
+            else:
+                tree_diff = g.diff("--stat", prior_tip, new_tip).strip()
+                print(f"  changed: {prior_tip[:8]} -> {new_tip[:8]}")
+                if tree_diff:
+                    print(f"  tree diff vs old tip:\n{tree_diff}")
+                else:
+                    print("  tree diff vs old tip: (identical tree, "
+                          "different commits — likely metadata only)")
+
+        if clean_branch in existing_branches:
             g.branch("-f", clean_branch, new_tip)
         else:
             g.branch(clean_branch, new_tip)
