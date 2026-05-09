@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """Sync personal-files changes onto bar/devcontainer, then rebase the current branch.
 
-Workflow:
+Default workflow:
   1. From the current branch, pick out unstaged/staged changes whose paths are
      under PERSONAL_PATHS. Commit them on bar/devcontainer with the message
      passed via -m. Push.
   2. Return to the original branch and rebase onto bar/devcontainer. Push if
      the branch has a remote tracking ref.
 
-Refuses to run if non-personal files are dirty (rebase needs a clean tree).
+With --rebase-on-rolling: fetch upstream/rolling, then rebase every local
+branch (except rolling itself) onto upstream/rolling independently. Each
+branch is force-with-lease pushed if it has an upstream.
+
+Refuses to run if the working tree has unstaged/staged changes (any rebase
+needs a clean tree; --rebase-on-rolling refuses on any dirt).
 """
 
 import argparse
@@ -26,6 +31,9 @@ PERSONAL_PATHS = [
 ]
 
 PERSONAL_BRANCH = "bar/devcontainer"
+UPSTREAM_REMOTE = "upstream"
+UPSTREAM_BRANCH = "rolling"
+UPSTREAM_REF = f"{UPSTREAM_REMOTE}/{UPSTREAM_BRANCH}"
 
 
 def is_personal(path: str) -> bool:
@@ -73,13 +81,84 @@ def prompt_yes_no(question: str) -> bool:
             return False
 
 
+def rebase_all_on_rolling(repo: Repo) -> int:
+    dirty = changed_paths(repo)
+    if dirty:
+        print("Refusing: working tree is not clean.", file=sys.stderr)
+        for p in dirty:
+            print(f"  {p}", file=sys.stderr)
+        return 1
+
+    g = repo.git
+    original = repo.active_branch.name
+
+    print(f"Fetching {UPSTREAM_REF}...")
+    try:
+        g.fetch(UPSTREAM_REMOTE, UPSTREAM_BRANCH)
+    except GitCommandError as e:
+        print(f"Fetch failed: {e.stderr or e}", file=sys.stderr)
+        return 1
+
+    branches = [h.name for h in repo.heads if h.name != UPSTREAM_BRANCH]
+    failed: list[str] = []
+
+    for branch in branches:
+        print(f"\n=== {branch} ===")
+        try:
+            g.checkout(branch)
+        except GitCommandError as e:
+            print(f"Checkout failed: {e.stderr or e}", file=sys.stderr)
+            failed.append(branch)
+            continue
+        try:
+            g.rebase(UPSTREAM_REF)
+        except GitCommandError as e:
+            print(f"Rebase failed: {e.stderr or e}", file=sys.stderr)
+            try:
+                g.rebase("--abort")
+            except GitCommandError:
+                pass
+            failed.append(branch)
+            continue
+        print(f"Rebased {branch} onto {UPSTREAM_REF}")
+        if has_upstream(repo, branch):
+            try:
+                print(g.push("--force-with-lease"))
+                print(f"Pushed {branch} (force-with-lease)")
+            except GitCommandError as e:
+                print(f"Push failed: {e.stderr or e}", file=sys.stderr)
+                failed.append(branch)
+        else:
+            print(f"No upstream for {branch}; skipping push")
+
+    try:
+        g.checkout(original)
+    except GitCommandError as e:
+        print(f"Could not return to {original}: {e.stderr or e}", file=sys.stderr)
+
+    if failed:
+        print(f"\nFailed branches: {', '.join(failed)}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("-m", "--message", required=True,
+    ap.add_argument("-m", "--message",
                     help="Commit message for the personal-files commit.")
+    ap.add_argument("--rebase-on-rolling", action="store_true",
+                    help=f"Rebase every local branch onto {UPSTREAM_REF} and push. "
+                         "Ignores -m and the personal-files flow.")
     args = ap.parse_args()
 
     repo = Repo(Path(__file__).resolve().parent.parent)
+
+    if args.rebase_on_rolling:
+        return rebase_all_on_rolling(repo)
+
+    if not args.message:
+        ap.error("-m/--message is required unless --rebase-on-rolling is given")
+
     current = repo.active_branch.name
 
     if current == PERSONAL_BRANCH:
