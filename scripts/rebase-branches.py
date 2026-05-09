@@ -108,16 +108,13 @@ def build_branch_tree(repo: Repo, new_base: str,
                       include_personal: bool) -> dict[str, str]:
     """Return the explicit branch tree by repo convention.
 
-    If include_personal:
-      - bar/devcontainer is rooted on new_base.
-      - Every other local branch is stacked on bar/devcontainer.
-    Else (used for --rebase-on-personal where new_base == bar/devcontainer):
-      - bar/devcontainer is excluded.
-      - Every other local branch is rooted on new_base (i.e. bar/devcontainer).
+    Only `*-dev` feature branches and their corresponding upstream-clean
+    siblings (`<x>` for each `<x>-dev`) participate.
 
-    Upstream-clean siblings (`<x>` where `<x>-dev` also exists locally) are
-    excluded — they're derived artifacts produced by build-upstream-branch.py
-    from their `-dev` source, not branches that should be rebased.
+      - bar/devcontainer is rooted on new_base when include_personal is true,
+        else excluded (already at new_base).
+      - Each `<x>-dev` is stacked on bar/devcontainer.
+      - Each `<x>` (sibling) is rooted on UPSTREAM_REF (upstream/rolling).
     """
     tree: dict[str, str] = {}
     local_names = {h.name for h in repo.heads}
@@ -125,15 +122,15 @@ def build_branch_tree(repo: Repo, new_base: str,
         return tree
     if include_personal:
         tree[PERSONAL_BRANCH] = new_base
+
     for h in repo.heads:
         name = h.name
-        if name == PERSONAL_BRANCH:
-            continue
-        if name == UPSTREAM_BRANCH:
-            continue
-        if f"{name}-dev" in local_names:
+        if not name.endswith("-dev"):
             continue
         tree[name] = PERSONAL_BRANCH if include_personal else new_base
+        sibling = name[: -len("-dev")]
+        if sibling in local_names:
+            tree[sibling] = UPSTREAM_REF
     return tree
 
 
@@ -171,9 +168,14 @@ def precheck_rebase_tree(repo: Repo, tree: dict[str, str],
     for branch, parent_ref in tree.items():
         if parent_ref == new_base:
             continue
-        if parent_ref not in tree:
+        if parent_ref in tree:
+            continue
+        try:
+            repo.commit(parent_ref)
+        except Exception:
             problems.append(
-                f"{branch}'s declared parent '{parent_ref}' is not in the tree")
+                f"{branch}'s declared parent '{parent_ref}' is not in the "
+                f"tree and does not resolve as a SHA")
 
     if problems:
         return problems, branch_point
@@ -182,8 +184,12 @@ def precheck_rebase_tree(repo: Repo, tree: dict[str, str],
 
     for branch, parent_ref in tree.items():
         tip = branch_shas[branch]
-        parent_tip = (new_base_sha if parent_ref == new_base
-                      else branch_shas[parent_ref])
+        if parent_ref == new_base:
+            parent_tip = new_base_sha
+        elif parent_ref in tree:
+            parent_tip = branch_shas[parent_ref]
+        else:
+            parent_tip = repo.commit(parent_ref).hexsha
 
         try:
             mb = repo.git.merge_base(tip, parent_tip).strip()
@@ -202,15 +208,28 @@ def precheck_rebase_tree(repo: Repo, tree: dict[str, str],
     return problems, branch_point
 
 
+def _is_external_parent(parent_ref: str, new_base: str,
+                        tree: dict[str, str]) -> bool:
+    """A parent_ref that is not new_base and not a branch in the tree.
+
+    Treated as a literal SHA pinning the branch's parent to a fixed commit
+    outside the rebase tree (e.g., the personal-branch root for upstream
+    siblings).
+    """
+    return parent_ref != new_base and parent_ref not in tree
+
+
 def _topo_sort_tree(tree: dict[str, str], new_base: str) -> list[str]:
-    """Order branches parents-first. Roots (parent == new_base) come first."""
+    """Order branches parents-first. Roots (parent == new_base or external
+    SHA) come first."""
     ordered: list[str] = []
     remaining = set(tree)
     while remaining:
         progress = False
         for b in list(remaining):
             p = tree[b]
-            if p == new_base or p in ordered:
+            if (p == new_base or _is_external_parent(p, new_base, tree)
+                    or p in ordered):
                 ordered.append(b)
                 remaining.remove(b)
                 progress = True
@@ -248,8 +267,12 @@ def _dry_walk_tree(repo: Repo, tree: dict[str, str], new_base: str,
     to_push: list[str] = []
     for b in _topo_sort_tree(tree, new_base):
         parent_ref = tree[b]
-        new_parent_sha = (new_base_sha if parent_ref == new_base
-                          else projected_new_tip[parent_ref])
+        if parent_ref == new_base:
+            new_parent_sha = new_base_sha
+        elif parent_ref in tree:
+            new_parent_sha = projected_new_tip[parent_ref]
+        else:
+            new_parent_sha = repo.commit(parent_ref).hexsha
         if branch_point[b] == new_parent_sha:
             projected_new_tip[b] = old_tip[b]
             if _diverged_from_origin(repo, b):
@@ -291,8 +314,12 @@ def rebase_tree(repo: Repo, log: UndoLog, tree: dict[str, str],
     for b in order:
         parent_ref = tree[b]
         old_base_sha = branch_point[b]
-        new_parent_sha = (new_base_sha if parent_ref == new_base
-                          else new_tip[parent_ref])
+        if parent_ref == new_base:
+            new_parent_sha = new_base_sha
+        elif parent_ref in tree:
+            new_parent_sha = new_tip[parent_ref]
+        else:
+            new_parent_sha = repo.commit(parent_ref).hexsha
 
         already_rebased = old_base_sha == new_parent_sha
         if already_rebased:
