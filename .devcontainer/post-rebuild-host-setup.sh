@@ -4,6 +4,8 @@
 # reboot, or whenever something feels off.
 set -eo pipefail
 
+[ ! -f /.dockerenv ] || { echo "ERROR: $0 must run on the host, not inside the container" >&2; exit 1; }
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Make sure the host SSH agent has a key loaded so the forwarded socket is
