@@ -1,4 +1,4 @@
-"""Path classification shared between sync-personal.py and build-upstream-branch.py.
+"""Path classification shared between rebase-branches.py and build-upstream-branch.py.
 
 Two sets:
 
