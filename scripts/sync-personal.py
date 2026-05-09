@@ -1,14 +1,8 @@
 #!/usr/bin/env python3
 """Sync personal-files changes between feature branches and bar/devcontainer.
 
-Three mutually-exclusive modes, all of which precheck everything and ABORT on
+Two mutually-exclusive modes, both of which precheck everything and ABORT on
 any problem before mutating anything:
-
-  --commit-personal -m "msg"
-    Commit currently-dirty personal-files (paths under PERSONAL_PATHS) on
-    bar/devcontainer with the given message, push, then checkout back to the
-    original branch. Refuses if non-personal files are dirty, if there are
-    no personal changes, or if running on bar/devcontainer.
 
   --rebase-on-personal
     Rebase every other local branch onto bar/devcontainer (tree-aware: each
@@ -34,13 +28,6 @@ from pathlib import Path
 from typing import Iterator, TextIO
 
 from git import GitCommandError, Repo
-
-PERSONAL_PATHS = [
-    ".devcontainer",
-    ".claude",
-    "scripts",
-    "CLAUDE.md",
-]
 
 PERSONAL_BRANCH = "bar/devcontainer"
 UPSTREAM_REMOTE = "upstream"
@@ -323,17 +310,6 @@ def rebase_tree(repo: Repo, log: UndoLog, tree: dict[str, str],
     return len(failed) == 0, failed
 
 
-def is_personal(path: str) -> bool:
-    p = Path(path)
-    if any(part == ".." for part in p.parts):
-        raise ValueError(f"path contains '..': {path!r}")
-    for personal in PERSONAL_PATHS:
-        pp = Path(personal)
-        if p == pp or pp in p.parents:
-            return True
-    return False
-
-
 def changed_paths(repo: Repo) -> list[str]:
     """Return all paths with working-tree or index changes, plus untracked files."""
     paths: set[str] = set()
@@ -358,85 +334,6 @@ def has_upstream(repo: Repo, branch_name: str) -> bool:
 
 def has_remote(repo: Repo, name: str) -> bool:
     return any(r.name == name for r in repo.remotes)
-
-
-def commit_personal(repo: Repo, message: str) -> int:
-    """Commit dirty personal files on bar/devcontainer, push, checkout back.
-
-    Prechecks (all run; first failure aborts; no mutations):
-      - Not currently on bar/devcontainer.
-      - bar/devcontainer exists locally.
-      - No non-personal files are dirty.
-      - At least one personal file is dirty.
-      - All dirty paths classify cleanly (no path-resolution errors).
-    """
-    if PERSONAL_BRANCH not in [h.name for h in repo.heads]:
-        print(f"Refusing: {PERSONAL_BRANCH} does not exist locally.",
-              file=sys.stderr)
-        return 1
-
-    current = repo.active_branch.name
-    if current == PERSONAL_BRANCH:
-        print(f"Refusing: already on {PERSONAL_BRANCH}; "
-              "this mode is for syncing FROM a feature branch.",
-              file=sys.stderr)
-        return 1
-
-    all_changes = changed_paths(repo)
-    try:
-        personal_changes = [p for p in all_changes if is_personal(p)]
-        other_changes = [p for p in all_changes if not is_personal(p)]
-    except ValueError as e:
-        print(f"Refusing: cannot classify path: {e}", file=sys.stderr)
-        return 1
-
-    if other_changes:
-        print("Refusing: non-personal files are dirty:", file=sys.stderr)
-        for p in other_changes:
-            print(f"  {p}", file=sys.stderr)
-        return 1
-
-    if not personal_changes:
-        print("Refusing: no personal-files changes to commit.", file=sys.stderr)
-        return 1
-
-    print(f"Personal changes ({len(personal_changes)}):")
-    for p in personal_changes:
-        print(f"  {p}")
-
-    g = repo.git
-    with undo_log(repo) as log:
-        pre_devc = repo.heads[PERSONAL_BRANCH].commit.hexsha
-        log.write_pre_change(PERSONAL_BRANCH, pre_devc, "personal-files commit")
-        try:
-            g.checkout(PERSONAL_BRANCH)
-            g.add("--", *personal_changes)
-            g.commit("-m", message)
-        except GitCommandError as e:
-            print(f"Commit failed: {e.stderr or e}", file=sys.stderr)
-            return 1
-
-        print(f"Committed on {PERSONAL_BRANCH}: {message}")
-
-        if has_upstream(repo, PERSONAL_BRANCH):
-            try:
-                g.push()
-                print(f"Pushed {PERSONAL_BRANCH}")
-            except GitCommandError as e:
-                print(f"Push failed: {e.stderr or e}", file=sys.stderr)
-                return 1
-        else:
-            print(f"No upstream for {PERSONAL_BRANCH}; skipping push")
-
-        try:
-            g.checkout(current)
-            print(f"Checked out back to {current}")
-        except GitCommandError as e:
-            print(f"Checkout back to {current} failed: {e.stderr or e}",
-                  file=sys.stderr)
-            return 1
-
-    return 0
 
 
 def rebase_on_personal(repo: Repo) -> int:
@@ -598,24 +495,14 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     mode = ap.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--commit-personal", action="store_true",
-                      help="Commit dirty personal files on bar/devcontainer "
-                           "and push. Requires -m.")
     mode.add_argument("--rebase-on-personal", action="store_true",
                       help="Rebase every other local branch onto bar/devcontainer.")
     mode.add_argument("--rebase-on-rolling", action="store_true",
                       help=f"Rebase bar/devcontainer onto {UPSTREAM_REF} and "
                            "every other local branch onto bar/devcontainer.")
-    ap.add_argument("-m", "--message",
-                    help="Commit message (required for --commit-personal).")
     args = ap.parse_args()
 
     repo = Repo(Path(__file__).resolve().parent.parent)
-
-    if args.commit_personal:
-        if not args.message:
-            ap.error("--commit-personal requires -m/--message")
-        return commit_personal(repo, args.message)
 
     if args.rebase_on_personal:
         return rebase_on_personal(repo)
