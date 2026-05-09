@@ -20,6 +20,7 @@ import argparse
 import datetime as _dt
 import sys
 from pathlib import Path
+from typing import TextIO
 
 import git
 from git import GitCommandError, Repo
@@ -38,7 +39,7 @@ UPSTREAM_REF = f"{UPSTREAM_REMOTE}/{UPSTREAM_BRANCH}"
 UNDO_LOG_DIR = Path(__file__).resolve().parent / ".sync-personal-undo"
 
 
-def open_undo_log(repo: Repo) -> tuple[Path, "object"]:
+def open_undo_log(repo: Repo) -> tuple[Path, TextIO]:
     """Open a fresh undo log file for this run. Logs every branch change."""
     UNDO_LOG_DIR.mkdir(exist_ok=True)
     ts = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -55,7 +56,7 @@ def open_undo_log(repo: Repo) -> tuple[Path, "object"]:
     return path, fh
 
 
-def log_branch_pre_change(fh, branch: str, old_sha: str, op: str) -> None:
+def log_branch_pre_change(fh: TextIO, branch: str, old_sha: str, op: str) -> None:
     """Record undo line for a branch BEFORE attempting to mutate it.
 
     Writes the `git update-ref` revert line first so that even if the script
@@ -64,6 +65,29 @@ def log_branch_pre_change(fh, branch: str, old_sha: str, op: str) -> None:
     fh.write(f"# {op}: {branch}  pre={old_sha[:12]}\n")
     fh.write(f"git update-ref refs/heads/{branch} {old_sha}\n")
     fh.flush()
+
+
+def rebase_branch(repo: Repo, log_fh: TextIO, branch: str,
+                  rebase_args: list[str], op_label: str) -> bool:
+    """Checkout `branch`, log pre-SHA, run `git rebase <rebase_args>`.
+
+    Returns True on success. On rebase failure: prints, aborts, returns False.
+    Caller handles push + post-rebase reporting.
+    """
+    g = repo.git
+    pre_sha = repo.heads[branch].commit.hexsha
+    log_branch_pre_change(log_fh, branch, pre_sha, op_label)
+    try:
+        g.checkout(branch)
+        g.rebase(*rebase_args)
+    except GitCommandError as e:
+        print(f"Rebase failed: {e.stderr or e}", file=sys.stderr)
+        try:
+            g.rebase("--abort")
+        except GitCommandError:
+            pass
+        return False
+    return True
 
 
 def is_personal(path: str) -> bool:
@@ -161,16 +185,8 @@ def rebase_all_on_rolling(repo: Repo) -> int:
 
     print(f"=== {PERSONAL_BRANCH} ===")
     print(f"  pre-rebase: {old_devc[:8]}")
-    log_branch_pre_change(log_fh, PERSONAL_BRANCH, old_devc, "rebase onto upstream/rolling")
-    try:
-        g.checkout(PERSONAL_BRANCH)
-        g.rebase(UPSTREAM_REF)
-    except GitCommandError as e:
-        print(f"Rebase failed: {e.stderr or e}", file=sys.stderr)
-        try:
-            g.rebase("--abort")
-        except GitCommandError:
-            pass
+    if not rebase_branch(repo, log_fh, PERSONAL_BRANCH, [UPSTREAM_REF],
+                         "rebase onto upstream/rolling"):
         print(f"\nAborting: {PERSONAL_BRANCH} rebase failed; no other branches touched.",
               file=sys.stderr)
         try:
@@ -208,17 +224,9 @@ def rebase_all_on_rolling(repo: Repo) -> int:
             skipped.append(branch)
             continue
 
-        log_branch_pre_change(log_fh, branch, branch_sha,
-                              f"rebase --onto {new_devc[:8]} {old_devc[:8]}")
-        try:
-            g.checkout(branch)
-            g.rebase("--onto", new_devc, old_devc, branch)
-        except GitCommandError as e:
-            print(f"Rebase failed: {e.stderr or e}", file=sys.stderr)
-            try:
-                g.rebase("--abort")
-            except GitCommandError:
-                pass
+        if not rebase_branch(repo, log_fh, branch,
+                             ["--onto", new_devc, old_devc, branch],
+                             f"rebase --onto {new_devc[:8]} {old_devc[:8]}"):
             failed.append(branch)
             continue
         new_sha = repo.heads[branch].commit.hexsha
@@ -283,19 +291,8 @@ def main() -> int:
             print("Aborted.")
             log_fh.close()
             return 1
-        g = repo.git
-        pre_sha = repo.heads[current].commit.hexsha
-        log_branch_pre_change(log_fh, current, pre_sha,
-                              f"pre-rebase onto {PERSONAL_BRANCH}")
-        try:
-            g.rebase(PERSONAL_BRANCH)
-        except GitCommandError as e:
-            print("Pre-rebase failed; aborting.", file=sys.stderr)
-            print(e.stderr or str(e), file=sys.stderr)
-            try:
-                g.rebase("--abort")
-            except GitCommandError:
-                pass
+        if not rebase_branch(repo, log_fh, current, [PERSONAL_BRANCH],
+                             f"pre-rebase onto {PERSONAL_BRANCH}"):
             log_fh.close()
             return 1
         print(f"Rebased {current} onto {PERSONAL_BRANCH}")
@@ -334,20 +331,8 @@ def main() -> int:
     else:
         print(f"No upstream for {PERSONAL_BRANCH}; skipping push")
 
-    g.checkout(current)
-
-    pre_current = repo.heads[current].commit.hexsha
-    log_branch_pre_change(log_fh, current, pre_current,
-                          f"rebase onto {PERSONAL_BRANCH}")
-    try:
-        g.rebase(PERSONAL_BRANCH)
-    except GitCommandError as e:
-        print("Rebase failed; aborting.", file=sys.stderr)
-        print(e.stderr or str(e), file=sys.stderr)
-        try:
-            g.rebase("--abort")
-        except GitCommandError:
-            pass
+    if not rebase_branch(repo, log_fh, current, [PERSONAL_BRANCH],
+                         f"rebase onto {PERSONAL_BRANCH}"):
         log_fh.close()
         return 1
 
