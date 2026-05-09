@@ -8,12 +8,18 @@ Default workflow:
   2. Return to the original branch and rebase onto bar/devcontainer. Push if
      the branch has a remote tracking ref.
 
-With --rebase-on-rolling: fetch upstream/rolling, then rebase every local
-branch (except rolling itself) onto upstream/rolling independently. Each
-branch is force-with-lease pushed if it has an upstream.
+With --rebase-on-rolling: fetch upstream/rolling, rebase bar/devcontainer
+onto it, then for every other local branch based on the OLD bar/devcontainer
+tip, rebase with `--onto NEW_DEVC OLD_DEVC <branch>` so only the branch's
+own commits replay (no duplicate personal commits). Each touched branch is
+force-with-lease pushed if it has an upstream. Branches not based on
+bar/devcontainer are skipped with a warning.
 
-Refuses to run if the working tree has unstaged/staged changes (any rebase
-needs a clean tree; --rebase-on-rolling refuses on any dirt).
+Refuses to run if non-personal files are dirty in the default flow, or if
+ANY file is dirty in --rebase-on-rolling. Every branch mutation is logged
+to scripts/.sync-personal-undo/<timestamp>.log with paste-ready
+`git update-ref` revert lines (written BEFORE the mutation, so a crash
+mid-script still leaves the undo trail on disk).
 """
 
 import argparse
@@ -22,7 +28,6 @@ import sys
 from pathlib import Path
 from typing import TextIO
 
-import git
 from git import GitCommandError, Repo
 
 PERSONAL_PATHS = [
@@ -156,17 +161,11 @@ def rebase_all_on_rolling(repo: Repo) -> int:
     g = repo.git
     original = repo.active_branch.name
 
-    pre_state: dict[str, str] = {}
-    for h in repo.heads:
-        pre_state[h.name] = h.commit.hexsha
+    pre_state: dict[str, str] = {h.name: h.commit.hexsha for h in repo.heads}
 
-    log_path, log_fh = open_undo_log(repo)
-    print(f"Undo log: {log_path}")
-    print("=== Pre-change branch state ===")
-    for name, sha in pre_state.items():
-        subject = repo.commit(sha).message.splitlines()[0]
-        print(f"  {name:30s} {sha[:8]}  {subject}")
-    print()
+    if PERSONAL_BRANCH not in pre_state:
+        print(f"Refusing: {PERSONAL_BRANCH} does not exist locally.", file=sys.stderr)
+        return 1
 
     print(f"Fetching {UPSTREAM_REF}...")
     try:
@@ -175,9 +174,13 @@ def rebase_all_on_rolling(repo: Repo) -> int:
         print(f"Fetch failed: {e.stderr or e}", file=sys.stderr)
         return 1
 
-    if PERSONAL_BRANCH not in pre_state:
-        print(f"Refusing: {PERSONAL_BRANCH} does not exist locally.", file=sys.stderr)
-        return 1
+    log_path, log_fh = open_undo_log(repo)
+    print(f"Undo log: {log_path}")
+    print("=== Pre-change branch state ===")
+    for name, sha in pre_state.items():
+        subject = repo.commit(sha).message.splitlines()[0]
+        print(f"  {name:30s} {sha[:8]}  {subject}")
+    print()
 
     old_devc = pre_state[PERSONAL_BRANCH]
     failed: list[str] = []
@@ -193,6 +196,7 @@ def rebase_all_on_rolling(repo: Repo) -> int:
             g.checkout(original)
         except GitCommandError:
             pass
+        log_fh.close()
         return 1
 
     new_devc = repo.heads[PERSONAL_BRANCH].commit.hexsha
@@ -306,6 +310,7 @@ def main() -> int:
               file=sys.stderr)
         for p in other_changes:
             print(f"  {p}", file=sys.stderr)
+        log_fh.close()
         return 1
 
     if not personal_changes:
