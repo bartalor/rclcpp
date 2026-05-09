@@ -95,6 +95,207 @@ def rebase_branch(repo: Repo, log_fh: TextIO, branch: str,
     return True
 
 
+def _has_merge_commit(repo: Repo, base: str, tip: str) -> bool:
+    return any(len(c.parents) > 1 for c in repo.iter_commits(f"{base}..{tip}"))
+
+
+def build_branch_tree(repo: Repo,
+                      new_base: str) -> dict[str, str]:
+    """Return the explicit branch tree by repo convention.
+
+    Convention (per CLAUDE.md):
+      - bar/devcontainer is rooted on new_base (upstream/rolling).
+      - Every other local branch is stacked on bar/devcontainer.
+      - The new_base ref itself (if it shows up as a local branch) is excluded.
+
+    Returns {branch_name: parent_ref}, where parent_ref is either another
+    branch name in the dict or `new_base`.
+    """
+    tree: dict[str, str] = {}
+    local_names = {h.name for h in repo.heads}
+    if PERSONAL_BRANCH not in local_names:
+        return tree
+    tree[PERSONAL_BRANCH] = new_base
+    for h in repo.heads:
+        name = h.name
+        if name == PERSONAL_BRANCH:
+            continue
+        if name == UPSTREAM_BRANCH:
+            continue
+        tree[name] = PERSONAL_BRANCH
+    return tree
+
+
+def precheck_rebase_tree(repo: Repo, tree: dict[str, str],
+                         new_base: str) -> list[str]:
+    """Validate that the declared `tree` is rebase-safe.
+
+    Returns a list of problems. Empty list = safe to proceed. Non-empty =
+    abort, no mutations.
+
+    Hard rule: every child's branch-point relative to its declared parent
+    must equal its parent's CURRENT tip. If the parent has any commits past
+    the branch-point, the child is stale — abort. The user must rebase the
+    child onto the parent manually first. This is what guarantees that
+    `git rebase --onto NEW_PARENT_TIP OLD_PARENT_TIP child` only replays
+    the child's own commits.
+
+    Other checks:
+      - Every branch in `tree` exists locally.
+      - new_base resolves.
+      - No merge commits in (parent..child) ranges.
+      - Every parent_ref is either new_base or another branch in `tree`.
+    """
+    problems: list[str] = []
+
+    try:
+        new_base_sha = repo.commit(new_base).hexsha
+    except Exception as e:
+        problems.append(f"new_base does not resolve: {new_base} ({e})")
+        return problems
+
+    local_names = {h.name for h in repo.heads}
+    for branch in tree:
+        if branch not in local_names:
+            problems.append(f"branch in tree does not exist locally: {branch}")
+
+    for branch, parent_ref in tree.items():
+        if parent_ref == new_base:
+            continue
+        if parent_ref not in tree:
+            problems.append(
+                f"{branch}'s declared parent '{parent_ref}' is not in the tree")
+
+    if problems:
+        return problems
+
+    branch_shas = {b: repo.heads[b].commit.hexsha for b in tree}
+
+    for branch, parent_ref in tree.items():
+        tip = branch_shas[branch]
+        parent_tip = (new_base_sha if parent_ref == new_base
+                      else branch_shas[parent_ref])
+
+        if _has_merge_commit(repo, parent_tip, tip):
+            problems.append(
+                f"{branch} contains merge commits in {parent_ref}..{branch}; "
+                f"rebase_tree only handles linear history")
+            continue
+
+        try:
+            mb = repo.git.merge_base(tip, parent_tip).strip()
+        except GitCommandError:
+            problems.append(f"{branch} has no merge-base with {parent_ref}")
+            continue
+
+        if mb != parent_tip:
+            ahead = sum(1 for _ in repo.iter_commits(f"{mb}..{parent_tip}"))
+            problems.append(
+                f"{branch} is stale relative to its declared parent "
+                f"'{parent_ref}': branch-point is {mb[:8]} but parent tip is "
+                f"{parent_tip[:8]} ({ahead} commit(s) ahead). Rebase "
+                f"{branch} onto {parent_ref} manually first.")
+
+    return problems
+
+
+def _topo_sort_tree(tree: dict[str, str], new_base: str) -> list[str]:
+    """Order branches parents-first. Roots (parent == new_base) come first."""
+    ordered: list[str] = []
+    remaining = set(tree)
+    while remaining:
+        progress = False
+        for b in list(remaining):
+            p = tree[b]
+            if p == new_base or p in ordered:
+                ordered.append(b)
+                remaining.remove(b)
+                progress = True
+        if not progress:
+            # cycle in declared tree; precheck should have caught upstream
+            ordered.extend(remaining)
+            break
+    return ordered
+
+
+def _descendants_of(tree: dict[str, str], branch: str) -> list[str]:
+    out: list[str] = []
+    pending = [branch]
+    while pending:
+        cur = pending.pop()
+        for b, p in tree.items():
+            if p == cur and b not in out:
+                out.append(b)
+                pending.append(b)
+    return out
+
+
+def rebase_tree(repo: Repo, log_fh: TextIO, tree: dict[str, str],
+                new_base: str) -> tuple[bool, list[str]]:
+    """Rebase every branch in `tree` onto its declared parent's new tip.
+
+    Pre-checks the entire tree first. Aborts before any side effect if any
+    check fails. After each successful rebase, force-with-lease pushes the
+    branch if it has an upstream. Returns (ok, failed_branch_names).
+    """
+    problems = precheck_rebase_tree(repo, tree, new_base)
+    if problems:
+        print("Pre-check failed; refusing to touch any branch:", file=sys.stderr)
+        for p in problems:
+            print(f"  - {p}", file=sys.stderr)
+        return False, []
+
+    g = repo.git
+    new_base_sha = repo.commit(new_base).hexsha
+    order = _topo_sort_tree(tree, new_base)
+
+    old_tip = {b: repo.heads[b].commit.hexsha for b in tree}
+    new_tip: dict[str, str] = {}
+    failed: list[str] = []
+
+    for b in order:
+        parent_ref = tree[b]
+        old_parent_sha = (new_base_sha if parent_ref == new_base
+                          else old_tip[parent_ref])
+        new_parent_sha = (new_base_sha if parent_ref == new_base
+                          else new_tip[parent_ref])
+
+        print(f"\n=== {b} ===")
+        print(f"  parent: {parent_ref}")
+        print(f"  pre-rebase: {old_tip[b][:8]}")
+        print(f"  --onto {new_parent_sha[:8]} {old_parent_sha[:8]}")
+
+        if old_parent_sha == new_parent_sha:
+            print("  parent unchanged; nothing to do")
+            new_tip[b] = old_tip[b]
+            continue
+
+        ok = rebase_branch(repo, log_fh, b,
+                           ["--onto", new_parent_sha, old_parent_sha, b],
+                           f"rebase --onto {new_parent_sha[:8]} {old_parent_sha[:8]}")
+        if not ok:
+            failed.append(b)
+            for d in _descendants_of(tree, b):
+                if d not in failed:
+                    failed.append(d)
+            break
+
+        new_tip[b] = repo.heads[b].commit.hexsha
+        print(f"  post-rebase: {new_tip[b][:8]}")
+
+        if has_upstream(repo, b):
+            try:
+                g.push("--force-with-lease")
+                print("  pushed (force-with-lease)")
+            except GitCommandError as e:
+                print(f"Push failed: {e.stderr or e}", file=sys.stderr)
+                failed.append(b)
+        else:
+            print("  no upstream; skipping push")
+
+    return len(failed) == 0, failed
+
+
 def is_personal(path: str) -> bool:
     p = Path(path)
     for personal in PERSONAL_PATHS:
@@ -141,15 +342,10 @@ def prompt_yes_no(question: str) -> bool:
 
 
 def rebase_all_on_rolling(repo: Repo) -> int:
-    """Rebase the dependency tree onto upstream/rolling, preserving structure.
+    """Rebase bar/devcontainer + every other local branch onto upstream/rolling.
 
-    The tree is: upstream/rolling <- bar/devcontainer <- feature branches.
-    Step 1: rebase bar/devcontainer onto upstream/rolling.
-    Step 2: for every other local branch based on the OLD bar/devcontainer,
-    rebase with `--onto NEW_DEVC OLD_DEVC <branch>` so only the branch's own
-    commits replay (no duplicates of personal commits).
-
-    A branch not based on bar/devcontainer is skipped with a warning.
+    Delegates the actual tree-aware rebase to rebase_tree, which pre-checks
+    everything and aborts before touching anything if there's any doubt.
     """
     dirty = changed_paths(repo)
     if dirty:
@@ -161,9 +357,7 @@ def rebase_all_on_rolling(repo: Repo) -> int:
     g = repo.git
     original = repo.active_branch.name
 
-    pre_state: dict[str, str] = {h.name: h.commit.hexsha for h in repo.heads}
-
-    if PERSONAL_BRANCH not in pre_state:
+    if PERSONAL_BRANCH not in [h.name for h in repo.heads]:
         print(f"Refusing: {PERSONAL_BRANCH} does not exist locally.", file=sys.stderr)
         return 1
 
@@ -174,76 +368,24 @@ def rebase_all_on_rolling(repo: Repo) -> int:
         print(f"Fetch failed: {e.stderr or e}", file=sys.stderr)
         return 1
 
+    tree = build_branch_tree(repo, UPSTREAM_REF)
+    if not tree:
+        print(f"No branches to rebase ({PERSONAL_BRANCH} missing).", file=sys.stderr)
+        return 1
+
     log_path, log_fh = open_undo_log(repo)
     print(f"Undo log: {log_path}")
     print("=== Pre-change branch state ===")
-    for name, sha in pre_state.items():
-        subject = repo.commit(sha).message.splitlines()[0]
-        print(f"  {name:30s} {sha[:8]}  {subject}")
+    for h in repo.heads:
+        subject = h.commit.message.splitlines()[0]
+        print(f"  {h.name:30s} {h.commit.hexsha[:8]}  {subject}")
+    print()
+    print("=== Declared tree ===")
+    for b, p in tree.items():
+        print(f"  {b} -> {p}")
     print()
 
-    old_devc = pre_state[PERSONAL_BRANCH]
-    failed: list[str] = []
-    skipped: list[str] = []
-
-    print(f"=== {PERSONAL_BRANCH} ===")
-    print(f"  pre-rebase: {old_devc[:8]}")
-    if not rebase_branch(repo, log_fh, PERSONAL_BRANCH, [UPSTREAM_REF],
-                         "rebase onto upstream/rolling"):
-        print(f"\nAborting: {PERSONAL_BRANCH} rebase failed; no other branches touched.",
-              file=sys.stderr)
-        try:
-            g.checkout(original)
-        except GitCommandError:
-            pass
-        log_fh.close()
-        return 1
-
-    new_devc = repo.heads[PERSONAL_BRANCH].commit.hexsha
-    print(f"  post-rebase: {new_devc[:8]}")
-    if has_upstream(repo, PERSONAL_BRANCH):
-        try:
-            g.push("--force-with-lease")
-            print(f"  pushed (force-with-lease)")
-        except GitCommandError as e:
-            print(f"Push failed: {e.stderr or e}", file=sys.stderr)
-            failed.append(PERSONAL_BRANCH)
-    else:
-        print(f"  no upstream; skipping push")
-
-    other_branches = [
-        name for name in pre_state
-        if name != PERSONAL_BRANCH and name != UPSTREAM_BRANCH
-    ]
-
-    for branch in other_branches:
-        print(f"\n=== {branch} ===")
-        branch_sha = pre_state[branch]
-        print(f"  pre-rebase: {branch_sha[:8]}")
-        try:
-            g.merge_base("--is-ancestor", old_devc, branch_sha)
-        except GitCommandError:
-            print(f"  not based on {PERSONAL_BRANCH}@{old_devc[:8]}; skipping",
-                  file=sys.stderr)
-            skipped.append(branch)
-            continue
-
-        if not rebase_branch(repo, log_fh, branch,
-                             ["--onto", new_devc, old_devc, branch],
-                             f"rebase --onto {new_devc[:8]} {old_devc[:8]}"):
-            failed.append(branch)
-            continue
-        new_sha = repo.heads[branch].commit.hexsha
-        print(f"  post-rebase: {new_sha[:8]}")
-        if has_upstream(repo, branch):
-            try:
-                g.push("--force-with-lease")
-                print(f"  pushed (force-with-lease)")
-            except GitCommandError as e:
-                print(f"Push failed: {e.stderr or e}", file=sys.stderr)
-                failed.append(branch)
-        else:
-            print(f"  no upstream; skipping push")
+    ok, failed = rebase_tree(repo, log_fh, tree, UPSTREAM_REF)
 
     try:
         g.checkout(original)
@@ -253,12 +395,9 @@ def rebase_all_on_rolling(repo: Repo) -> int:
     log_fh.close()
     print(f"\nUndo log written: {log_path}")
 
-    if skipped:
-        print(f"\nSkipped (not based on {PERSONAL_BRANCH}): {', '.join(skipped)}")
     if failed:
         print(f"\nFailed: {', '.join(failed)}", file=sys.stderr)
-        return 1
-    return 0
+    return 0 if ok else 1
 
 
 def main() -> int:
