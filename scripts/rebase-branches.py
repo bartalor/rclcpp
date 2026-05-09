@@ -227,28 +227,41 @@ def _descendants_of(tree: dict[str, str], branch: str) -> list[str]:
 
 
 def _dry_walk_tree(repo: Repo, tree: dict[str, str], new_base: str,
-                   branch_point: dict[str, str]) -> list[str]:
-    """Return branches in `tree` that actually need rebasing, in topo order.
+                   branch_point: dict[str, str]) -> tuple[list[str], list[str]]:
+    """Return (to_rebase, to_push) for branches in `tree`, in topo order.
 
-    A branch is a no-op iff its current branch-point equals what its parent's
-    new tip will be. Walks topologically so chained no-ops are detected:
-    parent no-op => parent's new tip == its old tip => child sees the same
-    SHA it's already at.
+    A branch needs rebasing iff its current branch-point != its parent's new
+    tip. Walks topologically so chained no-ops are detected. A branch needs
+    pushing iff it will be rebased OR its local tip already differs from
+    origin (force-with-lease).
     """
     new_base_sha = repo.commit(new_base).hexsha
     old_tip = {b: repo.heads[b].commit.hexsha for b in tree}
     projected_new_tip: dict[str, str] = {}
-    todo: list[str] = []
+    to_rebase: list[str] = []
+    to_push: list[str] = []
     for b in _topo_sort_tree(tree, new_base):
         parent_ref = tree[b]
         new_parent_sha = (new_base_sha if parent_ref == new_base
                           else projected_new_tip[parent_ref])
         if branch_point[b] == new_parent_sha:
             projected_new_tip[b] = old_tip[b]
+            if _diverged_from_origin(repo, b):
+                to_push.append(b)
         else:
             projected_new_tip[b] = "<rebased>"
-            todo.append(b)
-    return todo
+            to_rebase.append(b)
+            to_push.append(b)
+    return to_rebase, to_push
+
+
+def _diverged_from_origin(repo: Repo, branch: str) -> bool:
+    if not has_upstream(repo, branch):
+        return False
+    upstream = repo.heads[branch].tracking_branch()
+    if upstream is None:
+        return False
+    return repo.heads[branch].commit.hexsha != upstream.commit.hexsha
 
 
 def rebase_tree(repo: Repo, log: UndoLog, tree: dict[str, str],
@@ -275,41 +288,35 @@ def rebase_tree(repo: Repo, log: UndoLog, tree: dict[str, str],
         new_parent_sha = (new_base_sha if parent_ref == new_base
                           else new_tip[parent_ref])
 
-        if old_base_sha == new_parent_sha:
+        already_rebased = old_base_sha == new_parent_sha
+        if already_rebased:
             new_tip[b] = old_tip[b]
-            continue
+        else:
+            print(f"\n=== {b} ===")
+            print(f"  parent: {parent_ref}")
+            print(f"  pre-rebase: {old_tip[b][:8]}")
+            print(f"  --onto {new_parent_sha[:8]} {old_base_sha[:8]}")
 
-        print(f"\n=== {b} ===")
-        print(f"  parent: {parent_ref}")
-        print(f"  pre-rebase: {old_tip[b][:8]}")
-        print(f"  --onto {new_parent_sha[:8]} {old_base_sha[:8]}")
-
-        ok = rebase_branch(repo, log, b,
-                           ["--onto", new_parent_sha, old_base_sha, b],
-                           f"rebase --onto {new_parent_sha[:8]} {old_base_sha[:8]}")
-        if not ok:
-            failed.append(b)
-            for d in _descendants_of(tree, b):
-                if d not in failed:
-                    failed.append(d)
-            break
-
-        new_tip[b] = repo.heads[b].commit.hexsha
-        print(f"  post-rebase: {new_tip[b][:8]}")
-
-        if has_upstream(repo, b):
-            try:
-                g.push("--force-with-lease")
-                print("  pushed (force-with-lease)")
-            except GitCommandError as e:
-                print(f"Push failed: {e.stderr or e}", file=sys.stderr)
+            ok = rebase_branch(repo, log, b,
+                               ["--onto", new_parent_sha, old_base_sha, b],
+                               f"rebase --onto {new_parent_sha[:8]} {old_base_sha[:8]}")
+            if not ok:
                 failed.append(b)
                 for d in _descendants_of(tree, b):
                     if d not in failed:
                         failed.append(d)
                 break
-        else:
-            print("  no upstream; skipping push")
+
+            new_tip[b] = repo.heads[b].commit.hexsha
+            print(f"  post-rebase: {new_tip[b][:8]}")
+
+        push_rc, _ = push_if_ahead(repo, b)
+        if push_rc != 0:
+            failed.append(b)
+            for d in _descendants_of(tree, b):
+                if d not in failed:
+                    failed.append(d)
+            break
 
     return len(failed) == 0, failed
 
@@ -465,8 +472,8 @@ def _run_tree_rebase(repo: Repo, tree: dict[str, str],
             print(f"  - {p}", file=sys.stderr)
         return 1, False
 
-    todo = _dry_walk_tree(repo, tree, new_base, branch_point)
-    if not todo:
+    to_rebase, to_push = _dry_walk_tree(repo, tree, new_base, branch_point)
+    if not to_rebase and not to_push:
         return 0, False
 
     original = repo.active_branch.name
@@ -479,7 +486,12 @@ def _run_tree_rebase(repo: Repo, tree: dict[str, str],
     for b, p in tree.items():
         print(f"  {b} -> {p}")
     print()
-    print(f"=== Branches to rebase: {', '.join(todo)} ===")
+    if to_rebase:
+        print(f"=== Branches to rebase: {', '.join(to_rebase)} ===")
+    if to_push:
+        push_only = [b for b in to_push if b not in to_rebase]
+        if push_only:
+            print(f"=== Branches to push (already rebased): {', '.join(push_only)} ===")
 
     with undo_log(repo) as log:
         ok, failed = rebase_tree(repo, log, tree, new_base, branch_point)
