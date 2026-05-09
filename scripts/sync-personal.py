@@ -1,25 +1,29 @@
 #!/usr/bin/env python3
-"""Sync personal-files changes onto bar/devcontainer, then rebase the current branch.
+"""Sync personal-files changes between feature branches and bar/devcontainer.
 
-Default workflow:
-  1. From the current branch, pick out unstaged/staged changes whose paths are
-     under PERSONAL_PATHS. Commit them on bar/devcontainer with the message
-     passed via -m. Push.
-  2. Return to the original branch and rebase onto bar/devcontainer. Push if
-     the branch has a remote tracking ref.
+Three mutually-exclusive modes, all of which precheck everything and ABORT on
+any problem before mutating anything:
 
-With --rebase-on-rolling: fetch upstream/rolling, rebase bar/devcontainer
-onto it, then for every other local branch based on the OLD bar/devcontainer
-tip, rebase with `--onto NEW_DEVC OLD_DEVC <branch>` so only the branch's
-own commits replay (no duplicate personal commits). Each touched branch is
-force-with-lease pushed if it has an upstream. Branches not based on
-bar/devcontainer are skipped with a warning.
+  --commit-personal -m "msg"
+    Commit currently-dirty personal-files (paths under PERSONAL_PATHS) on
+    bar/devcontainer with the given message, push, then checkout back to the
+    original branch. Refuses if non-personal files are dirty, if there are
+    no personal changes, or if running on bar/devcontainer.
 
-Refuses to run if non-personal files are dirty in the default flow, or if
-ANY file is dirty in --rebase-on-rolling. Every branch mutation is logged
-to scripts/.sync-personal-undo/<timestamp>.log with paste-ready
-`git update-ref` revert lines (written BEFORE the mutation, so a crash
-mid-script still leaves the undo trail on disk).
+  --rebase-on-personal
+    Rebase every other local branch onto bar/devcontainer (tree-aware: each
+    branch's own commits replay on bar/devcontainer's current tip, no
+    duplicates). Refuses on any dirty file.
+
+  --rebase-on-rolling
+    Fetch upstream/rolling, then rebase bar/devcontainer onto it AND every
+    other local branch onto bar/devcontainer's new tip (tree-aware). Refuses
+    on any dirty file or stale branch (where merge-base(child, parent) is
+    not parent.tip — user must rebase manually first).
+
+Every branch mutation is logged to scripts/.sync-personal-undo/<timestamp>.log
+with paste-ready `git update-ref` revert lines (written BEFORE the mutation,
+so a crash mid-script still leaves the undo trail on disk).
 """
 
 import argparse
@@ -62,11 +66,7 @@ def open_undo_log(repo: Repo) -> tuple[Path, TextIO]:
 
 
 def log_branch_pre_change(fh: TextIO, branch: str, old_sha: str, op: str) -> None:
-    """Record undo line for a branch BEFORE attempting to mutate it.
-
-    Writes the `git update-ref` revert line first so that even if the script
-    crashes between this call and the rebase, the user can recover.
-    """
+    """Record undo line for a branch BEFORE attempting to mutate it."""
     fh.write(f"# {op}: {branch}  pre={old_sha[:12]}\n")
     fh.write(f"git update-ref refs/heads/{branch} {old_sha}\n")
     fh.flush()
@@ -74,11 +74,7 @@ def log_branch_pre_change(fh: TextIO, branch: str, old_sha: str, op: str) -> Non
 
 def rebase_branch(repo: Repo, log_fh: TextIO, branch: str,
                   rebase_args: list[str], op_label: str) -> bool:
-    """Checkout `branch`, log pre-SHA, run `git rebase <rebase_args>`.
-
-    Returns True on success. On rebase failure: prints, aborts, returns False.
-    Caller handles push + post-rebase reporting.
-    """
+    """Checkout `branch`, log pre-SHA, run `git rebase <rebase_args>`."""
     g = repo.git
     pre_sha = repo.heads[branch].commit.hexsha
     log_branch_pre_change(log_fh, branch, pre_sha, op_label)
@@ -99,30 +95,30 @@ def _has_merge_commit(repo: Repo, base: str, tip: str) -> bool:
     return any(len(c.parents) > 1 for c in repo.iter_commits(f"{base}..{tip}"))
 
 
-def build_branch_tree(repo: Repo,
-                      new_base: str) -> dict[str, str]:
+def build_branch_tree(repo: Repo, new_base: str,
+                      include_personal: bool) -> dict[str, str]:
     """Return the explicit branch tree by repo convention.
 
-    Convention (per CLAUDE.md):
-      - bar/devcontainer is rooted on new_base (upstream/rolling).
+    If include_personal:
+      - bar/devcontainer is rooted on new_base.
       - Every other local branch is stacked on bar/devcontainer.
-      - The new_base ref itself (if it shows up as a local branch) is excluded.
-
-    Returns {branch_name: parent_ref}, where parent_ref is either another
-    branch name in the dict or `new_base`.
+    Else (used for --rebase-on-personal where new_base == bar/devcontainer):
+      - bar/devcontainer is excluded.
+      - Every other local branch is rooted on new_base (i.e. bar/devcontainer).
     """
     tree: dict[str, str] = {}
     local_names = {h.name for h in repo.heads}
     if PERSONAL_BRANCH not in local_names:
         return tree
-    tree[PERSONAL_BRANCH] = new_base
+    if include_personal:
+        tree[PERSONAL_BRANCH] = new_base
     for h in repo.heads:
         name = h.name
         if name == PERSONAL_BRANCH:
             continue
         if name == UPSTREAM_BRANCH:
             continue
-        tree[name] = PERSONAL_BRANCH
+        tree[name] = PERSONAL_BRANCH if include_personal else new_base
     return tree
 
 
@@ -130,21 +126,11 @@ def precheck_rebase_tree(repo: Repo, tree: dict[str, str],
                          new_base: str) -> list[str]:
     """Validate that the declared `tree` is rebase-safe.
 
-    Returns a list of problems. Empty list = safe to proceed. Non-empty =
-    abort, no mutations.
+    Returns a list of problems. Empty = safe to proceed. Non-empty = abort.
 
     Hard rule: every child's branch-point relative to its declared parent
     must equal its parent's CURRENT tip. If the parent has any commits past
-    the branch-point, the child is stale — abort. The user must rebase the
-    child onto the parent manually first. This is what guarantees that
-    `git rebase --onto NEW_PARENT_TIP OLD_PARENT_TIP child` only replays
-    the child's own commits.
-
-    Other checks:
-      - Every branch in `tree` exists locally.
-      - new_base resolves.
-      - No merge commits in (parent..child) ranges.
-      - Every parent_ref is either new_base or another branch in `tree`.
+    the branch-point, the child is stale — abort.
     """
     problems: list[str] = []
 
@@ -212,7 +198,6 @@ def _topo_sort_tree(tree: dict[str, str], new_base: str) -> list[str]:
                 remaining.remove(b)
                 progress = True
         if not progress:
-            # cycle in declared tree; precheck should have caught upstream
             ordered.extend(remaining)
             break
     return ordered
@@ -234,9 +219,9 @@ def rebase_tree(repo: Repo, log_fh: TextIO, tree: dict[str, str],
                 new_base: str) -> tuple[bool, list[str]]:
     """Rebase every branch in `tree` onto its declared parent's new tip.
 
-    Pre-checks the entire tree first. Aborts before any side effect if any
-    check fails. After each successful rebase, force-with-lease pushes the
-    branch if it has an upstream. Returns (ok, failed_branch_names).
+    Pre-checks the entire tree; aborts pre-mutation on any failure. On any
+    rebase OR push failure mid-run, breaks immediately — descendants are
+    marked failed and not touched.
     """
     problems = precheck_rebase_tree(repo, tree, new_base)
     if problems:
@@ -290,6 +275,10 @@ def rebase_tree(repo: Repo, log_fh: TextIO, tree: dict[str, str],
             except GitCommandError as e:
                 print(f"Push failed: {e.stderr or e}", file=sys.stderr)
                 failed.append(b)
+                for d in _descendants_of(tree, b):
+                    if d not in failed:
+                        failed.append(d)
+                break
         else:
             print("  no upstream; skipping push")
 
@@ -298,6 +287,8 @@ def rebase_tree(repo: Repo, log_fh: TextIO, tree: dict[str, str],
 
 def is_personal(path: str) -> bool:
     p = Path(path)
+    if any(part == ".." for part in p.parts):
+        raise ValueError(f"path contains '..': {path!r}")
     for personal in PERSONAL_PATHS:
         pp = Path(personal)
         if p == pp or pp in p.parents:
@@ -327,25 +318,101 @@ def has_upstream(repo: Repo, branch_name: str) -> bool:
         return False
 
 
-def commits_ahead(repo: Repo, ahead: str, behind: str) -> int:
-    """How many commits `ahead` has that `behind` doesn't."""
-    return sum(1 for _ in repo.iter_commits(f"{behind}..{ahead}"))
+def has_remote(repo: Repo, name: str) -> bool:
+    return any(r.name == name for r in repo.remotes)
 
 
-def prompt_yes_no(question: str) -> bool:
-    while True:
-        ans = input(f"{question} [y/n]: ").strip().lower()
-        if ans in ("y", "yes"):
-            return True
-        if ans in ("n", "no"):
-            return False
+def commit_personal(repo: Repo, message: str) -> int:
+    """Commit dirty personal files on bar/devcontainer, push, checkout back.
+
+    Prechecks (all run; first failure aborts; no mutations):
+      - Not currently on bar/devcontainer.
+      - bar/devcontainer exists locally.
+      - No non-personal files are dirty.
+      - At least one personal file is dirty.
+      - All dirty paths classify cleanly (no path-resolution errors).
+    """
+    if PERSONAL_BRANCH not in [h.name for h in repo.heads]:
+        print(f"Refusing: {PERSONAL_BRANCH} does not exist locally.",
+              file=sys.stderr)
+        return 1
+
+    current = repo.active_branch.name
+    if current == PERSONAL_BRANCH:
+        print(f"Refusing: already on {PERSONAL_BRANCH}; "
+              "this mode is for syncing FROM a feature branch.",
+              file=sys.stderr)
+        return 1
+
+    all_changes = changed_paths(repo)
+    try:
+        personal_changes = [p for p in all_changes if is_personal(p)]
+        other_changes = [p for p in all_changes if not is_personal(p)]
+    except ValueError as e:
+        print(f"Refusing: cannot classify path: {e}", file=sys.stderr)
+        return 1
+
+    if other_changes:
+        print("Refusing: non-personal files are dirty:", file=sys.stderr)
+        for p in other_changes:
+            print(f"  {p}", file=sys.stderr)
+        return 1
+
+    if not personal_changes:
+        print("Refusing: no personal-files changes to commit.", file=sys.stderr)
+        return 1
+
+    print(f"Personal changes ({len(personal_changes)}):")
+    for p in personal_changes:
+        print(f"  {p}")
+
+    log_path, log_fh = open_undo_log(repo)
+    print(f"Undo log: {log_path}")
+
+    g = repo.git
+    pre_devc = repo.heads[PERSONAL_BRANCH].commit.hexsha
+    log_branch_pre_change(log_fh, PERSONAL_BRANCH, pre_devc, "personal-files commit")
+    try:
+        g.checkout(PERSONAL_BRANCH)
+        g.add("--", *personal_changes)
+        g.commit("-m", message)
+    except GitCommandError as e:
+        print(f"Commit failed: {e.stderr or e}", file=sys.stderr)
+        log_fh.close()
+        return 1
+
+    print(f"Committed on {PERSONAL_BRANCH}: {message}")
+
+    if has_upstream(repo, PERSONAL_BRANCH):
+        try:
+            g.push()
+            print(f"Pushed {PERSONAL_BRANCH}")
+        except GitCommandError as e:
+            print(f"Push failed: {e.stderr or e}", file=sys.stderr)
+            log_fh.close()
+            return 1
+    else:
+        print(f"No upstream for {PERSONAL_BRANCH}; skipping push")
+
+    try:
+        g.checkout(current)
+        print(f"Checked out back to {current}")
+    except GitCommandError as e:
+        print(f"Checkout back to {current} failed: {e.stderr or e}",
+              file=sys.stderr)
+        log_fh.close()
+        return 1
+
+    log_fh.close()
+    print(f"\nUndo log written: {log_path}")
+    return 0
 
 
-def rebase_all_on_rolling(repo: Repo) -> int:
-    """Rebase bar/devcontainer + every other local branch onto upstream/rolling.
+def rebase_on_personal(repo: Repo) -> int:
+    """Rebase every other local branch onto bar/devcontainer.
 
-    Delegates the actual tree-aware rebase to rebase_tree, which pre-checks
-    everything and aborts before touching anything if there's any doubt.
+    Prechecks: clean tree, bar/devcontainer exists. Tree-aware rebase
+    aborts pre-mutation on any tree problem.
     """
     dirty = changed_paths(repo)
     if dirty:
@@ -354,25 +421,73 @@ def rebase_all_on_rolling(repo: Repo) -> int:
             print(f"  {p}", file=sys.stderr)
         return 1
 
-    g = repo.git
-    original = repo.active_branch.name
+    if PERSONAL_BRANCH not in [h.name for h in repo.heads]:
+        print(f"Refusing: {PERSONAL_BRANCH} does not exist locally.",
+              file=sys.stderr)
+        return 1
+
+    tree = build_branch_tree(repo, PERSONAL_BRANCH, include_personal=False)
+    if not tree:
+        print("Refusing: nothing to rebase.", file=sys.stderr)
+        return 1
+
+    return _run_tree_rebase(repo, tree, PERSONAL_BRANCH)
+
+
+def rebase_on_rolling(repo: Repo) -> int:
+    """Rebase bar/devcontainer + every other local branch onto upstream/rolling.
+
+    Prechecks: clean tree, bar/devcontainer exists, upstream remote exists.
+    Then fetch (read-only network), then tree-aware rebase which aborts
+    pre-mutation on any tree problem.
+    """
+    dirty = changed_paths(repo)
+    if dirty:
+        print("Refusing: working tree is not clean.", file=sys.stderr)
+        for p in dirty:
+            print(f"  {p}", file=sys.stderr)
+        return 1
 
     if PERSONAL_BRANCH not in [h.name for h in repo.heads]:
-        print(f"Refusing: {PERSONAL_BRANCH} does not exist locally.", file=sys.stderr)
+        print(f"Refusing: {PERSONAL_BRANCH} does not exist locally.",
+              file=sys.stderr)
+        return 1
+
+    if not has_remote(repo, UPSTREAM_REMOTE):
+        print(f"Refusing: remote '{UPSTREAM_REMOTE}' does not exist.",
+              file=sys.stderr)
         return 1
 
     print(f"Fetching {UPSTREAM_REF}...")
     try:
-        g.fetch(UPSTREAM_REMOTE, UPSTREAM_BRANCH)
+        repo.git.fetch(UPSTREAM_REMOTE, UPSTREAM_BRANCH)
     except GitCommandError as e:
         print(f"Fetch failed: {e.stderr or e}", file=sys.stderr)
         return 1
 
-    tree = build_branch_tree(repo, UPSTREAM_REF)
+    tree = build_branch_tree(repo, UPSTREAM_REF, include_personal=True)
     if not tree:
-        print(f"No branches to rebase ({PERSONAL_BRANCH} missing).", file=sys.stderr)
+        print("Refusing: nothing to rebase.", file=sys.stderr)
         return 1
 
+    return _run_tree_rebase(repo, tree, UPSTREAM_REF)
+
+
+def _run_tree_rebase(repo: Repo, tree: dict[str, str], new_base: str) -> int:
+    """Shared driver: precheck (via rebase_tree), rebase, restore branch.
+
+    Opens the undo log AFTER the precheck would have a chance to run, so an
+    abort doesn't write a near-empty file. To preserve that, we run a dry
+    precheck here first.
+    """
+    problems = precheck_rebase_tree(repo, tree, new_base)
+    if problems:
+        print("Pre-check failed; refusing to touch any branch:", file=sys.stderr)
+        for p in problems:
+            print(f"  - {p}", file=sys.stderr)
+        return 1
+
+    original = repo.active_branch.name
     log_path, log_fh = open_undo_log(repo)
     print(f"Undo log: {log_path}")
     print("=== Pre-change branch state ===")
@@ -385,12 +500,13 @@ def rebase_all_on_rolling(repo: Repo) -> int:
         print(f"  {b} -> {p}")
     print()
 
-    ok, failed = rebase_tree(repo, log_fh, tree, UPSTREAM_REF)
+    ok, failed = rebase_tree(repo, log_fh, tree, new_base)
 
     try:
-        g.checkout(original)
+        repo.git.checkout(original)
     except GitCommandError as e:
-        print(f"Could not return to {original}: {e.stderr or e}", file=sys.stderr)
+        print(f"Could not return to {original}: {e.stderr or e}",
+              file=sys.stderr)
 
     log_fh.close()
     print(f"\nUndo log written: {log_path}")
@@ -401,96 +517,36 @@ def rebase_all_on_rolling(repo: Repo) -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    mode = ap.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--commit-personal", action="store_true",
+                      help="Commit dirty personal files on bar/devcontainer "
+                           "and push. Requires -m.")
+    mode.add_argument("--rebase-on-personal", action="store_true",
+                      help="Rebase every other local branch onto bar/devcontainer.")
+    mode.add_argument("--rebase-on-rolling", action="store_true",
+                      help=f"Rebase bar/devcontainer onto {UPSTREAM_REF} and "
+                           "every other local branch onto bar/devcontainer.")
     ap.add_argument("-m", "--message",
-                    help="Commit message for the personal-files commit.")
-    ap.add_argument("--rebase-on-rolling", action="store_true",
-                    help=f"Rebase every local branch onto {UPSTREAM_REF} and push. "
-                         "Ignores -m and the personal-files flow.")
+                    help="Commit message (required for --commit-personal).")
     args = ap.parse_args()
 
     repo = Repo(Path(__file__).resolve().parent.parent)
 
+    if args.commit_personal:
+        if not args.message:
+            ap.error("--commit-personal requires -m/--message")
+        return commit_personal(repo, args.message)
+
+    if args.rebase_on_personal:
+        return rebase_on_personal(repo)
+
     if args.rebase_on_rolling:
-        return rebase_all_on_rolling(repo)
+        return rebase_on_rolling(repo)
 
-    if not args.message:
-        ap.error("-m/--message is required unless --rebase-on-rolling is given")
-
-    current = repo.active_branch.name
-
-    if current == PERSONAL_BRANCH:
-        print(f"Already on {PERSONAL_BRANCH}; this script is for syncing FROM a feature branch.",
-              file=sys.stderr)
-        return 1
-
-    log_path, log_fh = open_undo_log(repo)
-    print(f"Undo log: {log_path}")
-
-    ahead = commits_ahead(repo, PERSONAL_BRANCH, current)
-    if ahead > 0:
-        print(f"{PERSONAL_BRANCH} is {ahead} commit(s) ahead of {current}.")
-        if not prompt_yes_no(f"Rebase {current} onto {PERSONAL_BRANCH} first?"):
-            print("Aborted.")
-            log_fh.close()
-            return 1
-        if not rebase_branch(repo, log_fh, current, [PERSONAL_BRANCH],
-                             f"pre-rebase onto {PERSONAL_BRANCH}"):
-            log_fh.close()
-            return 1
-        print(f"Rebased {current} onto {PERSONAL_BRANCH}")
-
-    all_changes = changed_paths(repo)
-    personal_changes = [p for p in all_changes if is_personal(p)]
-    other_changes = [p for p in all_changes if not is_personal(p)]
-
-    if other_changes:
-        print("Refusing: non-personal files are dirty (rebase needs a clean tree):",
-              file=sys.stderr)
-        for p in other_changes:
-            print(f"  {p}", file=sys.stderr)
-        log_fh.close()
-        return 1
-
-    if not personal_changes:
-        print("No personal-files changes to sync.")
-        log_fh.close()
-        return 0
-
-    print(f"Personal changes ({len(personal_changes)}):")
-    for p in personal_changes:
-        print(f"  {p}")
-
-    g = repo.git
-    pre_devc = repo.heads[PERSONAL_BRANCH].commit.hexsha
-    log_branch_pre_change(log_fh, PERSONAL_BRANCH, pre_devc, "personal-files commit")
-    g.checkout(PERSONAL_BRANCH)
-    g.add("--", *personal_changes)
-    g.commit("-m", args.message)
-    print(f"Committed on {PERSONAL_BRANCH}: {args.message}")
-
-    if has_upstream(repo, PERSONAL_BRANCH):
-        print(g.push())
-        print(f"Pushed {PERSONAL_BRANCH}")
-    else:
-        print(f"No upstream for {PERSONAL_BRANCH}; skipping push")
-
-    if not rebase_branch(repo, log_fh, current, [PERSONAL_BRANCH],
-                         f"rebase onto {PERSONAL_BRANCH}"):
-        log_fh.close()
-        return 1
-
-    print(f"Rebased {current} onto {PERSONAL_BRANCH}")
-
-    if has_upstream(repo, current):
-        print(g.push("--force-with-lease"))
-        print(f"Pushed {current} (force-with-lease)")
-    else:
-        print(f"No upstream for {current}; skipping push")
-
-    log_fh.close()
-    print(f"\nUndo log written: {log_path}")
-    return 0
+    ap.error("no mode selected")  # unreachable; group is required
+    return 1
 
 
 if __name__ == "__main__":
