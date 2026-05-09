@@ -122,23 +122,36 @@ def build_branch_tree(repo: Repo, new_base: str,
     return tree
 
 
-def precheck_rebase_tree(repo: Repo, tree: dict[str, str],
-                         new_base: str) -> list[str]:
+def precheck_rebase_tree(repo: Repo, tree: dict[str, str], new_base: str,
+                         require_fresh: bool) -> tuple[list[str], dict[str, str]]:
     """Validate that the declared `tree` is rebase-safe.
 
-    Returns a list of problems. Empty = safe to proceed. Non-empty = abort.
+    Returns (problems, branch_point). Empty `problems` = safe to proceed.
+    `branch_point[b]` is the SHA where `b` currently branches off its
+    declared parent (== merge-base(b.tip, parent.tip)). The caller passes
+    this as OLD_BASE to `git rebase --onto NEW_BASE OLD_BASE b`.
 
-    Hard rule: every child's branch-point relative to its declared parent
-    must equal its parent's CURRENT tip. If the parent has any commits past
-    the branch-point, the child is stale — abort.
+    If `require_fresh`, additionally enforce that branch-point == parent tip
+    (no parent commits past the branch-point). Use this for
+    --rebase-on-rolling, where parent commits past the branch-point would
+    be silently dropped from the child. Don't use it for
+    --rebase-on-personal, where bringing the child up to the parent's
+    current tip is the whole point.
+
+    Other checks (always on):
+      - Every branch in `tree` exists locally.
+      - new_base resolves.
+      - No merge commits in (merge-base..child) ranges.
+      - Every parent_ref is either new_base or another branch in `tree`.
     """
     problems: list[str] = []
+    branch_point: dict[str, str] = {}
 
     try:
         new_base_sha = repo.commit(new_base).hexsha
     except Exception as e:
         problems.append(f"new_base does not resolve: {new_base} ({e})")
-        return problems
+        return problems, branch_point
 
     local_names = {h.name for h in repo.heads}
     for branch in tree:
@@ -153,7 +166,7 @@ def precheck_rebase_tree(repo: Repo, tree: dict[str, str],
                 f"{branch}'s declared parent '{parent_ref}' is not in the tree")
 
     if problems:
-        return problems
+        return problems, branch_point
 
     branch_shas = {b: repo.heads[b].commit.hexsha for b in tree}
 
@@ -162,19 +175,21 @@ def precheck_rebase_tree(repo: Repo, tree: dict[str, str],
         parent_tip = (new_base_sha if parent_ref == new_base
                       else branch_shas[parent_ref])
 
-        if _has_merge_commit(repo, parent_tip, tip):
-            problems.append(
-                f"{branch} contains merge commits in {parent_ref}..{branch}; "
-                f"rebase_tree only handles linear history")
-            continue
-
         try:
             mb = repo.git.merge_base(tip, parent_tip).strip()
         except GitCommandError:
             problems.append(f"{branch} has no merge-base with {parent_ref}")
             continue
 
-        if mb != parent_tip:
+        if _has_merge_commit(repo, mb, tip):
+            problems.append(
+                f"{branch} contains merge commits in {mb[:8]}..{branch}; "
+                f"rebase_tree only handles linear history")
+            continue
+
+        branch_point[branch] = mb
+
+        if require_fresh and mb != parent_tip:
             ahead = sum(1 for _ in repo.iter_commits(f"{mb}..{parent_tip}"))
             problems.append(
                 f"{branch} is stale relative to its declared parent "
@@ -182,7 +197,7 @@ def precheck_rebase_tree(repo: Repo, tree: dict[str, str],
                 f"{parent_tip[:8]} ({ahead} commit(s) ahead). Rebase "
                 f"{branch} onto {parent_ref} manually first.")
 
-    return problems
+    return problems, branch_point
 
 
 def _topo_sort_tree(tree: dict[str, str], new_base: str) -> list[str]:
@@ -216,14 +231,19 @@ def _descendants_of(tree: dict[str, str], branch: str) -> list[str]:
 
 
 def rebase_tree(repo: Repo, log_fh: TextIO, tree: dict[str, str],
-                new_base: str) -> tuple[bool, list[str]]:
+                new_base: str, require_fresh: bool) -> tuple[bool, list[str]]:
     """Rebase every branch in `tree` onto its declared parent's new tip.
 
     Pre-checks the entire tree; aborts pre-mutation on any failure. On any
     rebase OR push failure mid-run, breaks immediately — descendants are
     marked failed and not touched.
+
+    require_fresh: see precheck_rebase_tree. Pass True for --rebase-on-rolling
+    (any staleness is an error); False for --rebase-on-personal (staleness
+    is the input — bring children forward to parent's current tip).
     """
-    problems = precheck_rebase_tree(repo, tree, new_base)
+    problems, branch_point = precheck_rebase_tree(repo, tree, new_base,
+                                                  require_fresh)
     if problems:
         print("Pre-check failed; refusing to touch any branch:", file=sys.stderr)
         for p in problems:
@@ -240,24 +260,23 @@ def rebase_tree(repo: Repo, log_fh: TextIO, tree: dict[str, str],
 
     for b in order:
         parent_ref = tree[b]
-        old_parent_sha = (new_base_sha if parent_ref == new_base
-                          else old_tip[parent_ref])
+        old_base_sha = branch_point[b]
         new_parent_sha = (new_base_sha if parent_ref == new_base
                           else new_tip[parent_ref])
 
         print(f"\n=== {b} ===")
         print(f"  parent: {parent_ref}")
         print(f"  pre-rebase: {old_tip[b][:8]}")
-        print(f"  --onto {new_parent_sha[:8]} {old_parent_sha[:8]}")
+        print(f"  --onto {new_parent_sha[:8]} {old_base_sha[:8]}")
 
-        if old_parent_sha == new_parent_sha:
-            print("  parent unchanged; nothing to do")
+        if old_base_sha == new_parent_sha:
+            print("  branch-point already at parent's new tip; nothing to do")
             new_tip[b] = old_tip[b]
             continue
 
         ok = rebase_branch(repo, log_fh, b,
-                           ["--onto", new_parent_sha, old_parent_sha, b],
-                           f"rebase --onto {new_parent_sha[:8]} {old_parent_sha[:8]}")
+                           ["--onto", new_parent_sha, old_base_sha, b],
+                           f"rebase --onto {new_parent_sha[:8]} {old_base_sha[:8]}")
         if not ok:
             failed.append(b)
             for d in _descendants_of(tree, b):
@@ -431,7 +450,7 @@ def rebase_on_personal(repo: Repo) -> int:
         print("Refusing: nothing to rebase.", file=sys.stderr)
         return 1
 
-    return _run_tree_rebase(repo, tree, PERSONAL_BRANCH)
+    return _run_tree_rebase(repo, tree, PERSONAL_BRANCH, require_fresh=False)
 
 
 def rebase_on_rolling(repo: Repo) -> int:
@@ -470,17 +489,17 @@ def rebase_on_rolling(repo: Repo) -> int:
         print("Refusing: nothing to rebase.", file=sys.stderr)
         return 1
 
-    return _run_tree_rebase(repo, tree, UPSTREAM_REF)
+    return _run_tree_rebase(repo, tree, UPSTREAM_REF, require_fresh=True)
 
 
-def _run_tree_rebase(repo: Repo, tree: dict[str, str], new_base: str) -> int:
-    """Shared driver: precheck (via rebase_tree), rebase, restore branch.
+def _run_tree_rebase(repo: Repo, tree: dict[str, str], new_base: str,
+                     require_fresh: bool) -> int:
+    """Shared driver: precheck, then rebase, then restore branch.
 
-    Opens the undo log AFTER the precheck would have a chance to run, so an
-    abort doesn't write a near-empty file. To preserve that, we run a dry
-    precheck here first.
+    Opens the undo log AFTER the precheck so an abort doesn't write a
+    near-empty file.
     """
-    problems = precheck_rebase_tree(repo, tree, new_base)
+    problems, _ = precheck_rebase_tree(repo, tree, new_base, require_fresh)
     if problems:
         print("Pre-check failed; refusing to touch any branch:", file=sys.stderr)
         for p in problems:
@@ -500,7 +519,7 @@ def _run_tree_rebase(repo: Repo, tree: dict[str, str], new_base: str) -> int:
         print(f"  {b} -> {p}")
     print()
 
-    ok, failed = rebase_tree(repo, log_fh, tree, new_base)
+    ok, failed = rebase_tree(repo, log_fh, tree, new_base, require_fresh)
 
     try:
         repo.git.checkout(original)
