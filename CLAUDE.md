@@ -4,10 +4,10 @@
 
 To commit personal-file changes: switch to `bar/devcontainer`, commit and push there, then switch back and run `--rebase-on-personal` to fan the new tip out to feature branches.
 
-`scripts/sync-personal.py` has two mutually-exclusive modes; both precheck everything and abort on any problem before mutating anything.
+`scripts/rebase-branches.py` has two mutually-exclusive modes; both precheck everything and abort on any problem before mutating anything.
 
-- `python3 scripts/sync-personal.py --rebase-on-personal` — rebase every other local branch onto `bar/devcontainer` (tree-aware, no duplicate commits). Refuses on a dirty tree.
-- `python3 scripts/sync-personal.py --rebase-on-rolling` — fetch `upstream/rolling`, rebase `bar/devcontainer` onto it, then rebase every other local branch onto `bar/devcontainer`'s new tip (tree-aware). Refuses on a dirty tree or any stale branch.
+- `python3 scripts/rebase-branches.py --rebase-on-personal` — rebase every other local branch onto `bar/devcontainer` (tree-aware, no duplicate commits). Refuses on a dirty tree.
+- `python3 scripts/rebase-branches.py --rebase-on-rolling` — fetch `upstream/rolling`, rebase `bar/devcontainer` onto it, then rebase every other local branch onto `bar/devcontainer`'s new tip (tree-aware). Refuses on a dirty tree or any stale branch.
 
 # Persistence
 
