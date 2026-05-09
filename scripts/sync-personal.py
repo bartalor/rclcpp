@@ -122,23 +122,18 @@ def build_branch_tree(repo: Repo, new_base: str,
     return tree
 
 
-def precheck_rebase_tree(repo: Repo, tree: dict[str, str], new_base: str,
-                         require_fresh: bool) -> tuple[list[str], dict[str, str]]:
+def precheck_rebase_tree(repo: Repo, tree: dict[str, str],
+                         new_base: str) -> tuple[list[str], dict[str, str]]:
     """Validate that the declared `tree` is rebase-safe.
 
     Returns (problems, branch_point). Empty `problems` = safe to proceed.
     `branch_point[b]` is the SHA where `b` currently branches off its
     declared parent (== merge-base(b.tip, parent.tip)). The caller passes
-    this as OLD_BASE to `git rebase --onto NEW_BASE OLD_BASE b`.
+    this as OLD_BASE to `git rebase --onto NEW_BASE OLD_BASE b`, which
+    replays exactly b's own commits (since branch_point) onto the parent's
+    new tip.
 
-    If `require_fresh`, additionally enforce that branch-point == parent tip
-    (no parent commits past the branch-point). Use this for
-    --rebase-on-rolling, where parent commits past the branch-point would
-    be silently dropped from the child. Don't use it for
-    --rebase-on-personal, where bringing the child up to the parent's
-    current tip is the whole point.
-
-    Other checks (always on):
+    Checks:
       - Every branch in `tree` exists locally.
       - new_base resolves.
       - No merge commits in (merge-base..child) ranges.
@@ -188,14 +183,6 @@ def precheck_rebase_tree(repo: Repo, tree: dict[str, str], new_base: str,
             continue
 
         branch_point[branch] = mb
-
-        if require_fresh and mb != parent_tip:
-            ahead = sum(1 for _ in repo.iter_commits(f"{mb}..{parent_tip}"))
-            problems.append(
-                f"{branch} is stale relative to its declared parent "
-                f"'{parent_ref}': branch-point is {mb[:8]} but parent tip is "
-                f"{parent_tip[:8]} ({ahead} commit(s) ahead). Rebase "
-                f"{branch} onto {parent_ref} manually first.")
 
     return problems, branch_point
 
@@ -465,8 +452,7 @@ def rebase_on_personal(repo: Repo) -> int:
         print("Refusing: nothing to rebase.", file=sys.stderr)
         return 1
 
-    rc, did_rebase = _run_tree_rebase(repo, tree, PERSONAL_BRANCH,
-                                      require_fresh=False)
+    rc, did_rebase = _run_tree_rebase(repo, tree, PERSONAL_BRANCH)
     if rc != 0:
         return rc
 
@@ -546,23 +532,21 @@ def rebase_on_rolling(repo: Repo) -> int:
         print("Refusing: nothing to rebase.", file=sys.stderr)
         return 1
 
-    rc, did_rebase = _run_tree_rebase(repo, tree, UPSTREAM_REF,
-                                      require_fresh=True)
+    rc, did_rebase = _run_tree_rebase(repo, tree, UPSTREAM_REF)
     if rc == 0 and not did_rebase:
         print("Nothing to do.")
     return rc
 
 
-def _run_tree_rebase(repo: Repo, tree: dict[str, str], new_base: str,
-                     require_fresh: bool) -> tuple[int, bool]:
+def _run_tree_rebase(repo: Repo, tree: dict[str, str],
+                     new_base: str) -> tuple[int, bool]:
     """Shared driver: precheck, then rebase, then restore branch.
 
     Returns (rc, did_anything). rc=0 on success. did_anything=True iff at
     least one branch was actually rebased. Silent (no output, no log file)
     when there is nothing to rebase.
     """
-    problems, branch_point = precheck_rebase_tree(repo, tree, new_base,
-                                                  require_fresh)
+    problems, branch_point = precheck_rebase_tree(repo, tree, new_base)
     if problems:
         print("Pre-check failed; refusing to touch any branch:", file=sys.stderr)
         for p in problems:
