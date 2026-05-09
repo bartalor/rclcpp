@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sync personal-files changes between feature branches and bar/devcontainer.
+"""Rebase the personal branch + every feature branch in a tree-aware way.
 
 Two mutually-exclusive modes, both of which precheck everything and ABORT on
 any problem before mutating anything:
@@ -15,7 +15,7 @@ any problem before mutating anything:
     on any dirty file or stale branch (where merge-base(child, parent) is
     not parent.tip — user must rebase manually first).
 
-Every branch mutation is logged to scripts/.sync-personal-undo/<timestamp>.log
+Every branch mutation is logged to scripts/.rebase-branches-undo/<timestamp>.log
 with paste-ready `git update-ref` revert lines (written BEFORE the mutation,
 so a crash mid-script still leaves the undo trail on disk).
 """
@@ -33,7 +33,7 @@ PERSONAL_BRANCH = "bar/devcontainer"
 UPSTREAM_REMOTE = "upstream"
 UPSTREAM_BRANCH = "rolling"
 UPSTREAM_REF = f"{UPSTREAM_REMOTE}/{UPSTREAM_BRANCH}"
-UNDO_LOG_DIR = Path(__file__).resolve().parent / ".sync-personal-undo"
+UNDO_LOG_DIR = Path(__file__).resolve().parent / ".rebase-branches-undo"
 UNDO_LOG_KEEP = 5
 
 
@@ -66,7 +66,7 @@ def undo_log(repo: Repo) -> Iterator[UndoLog]:
     path = UNDO_LOG_DIR / f"{ts}.log"
     fh = path.open("w")
     try:
-        fh.write(f"# sync-personal.py undo log: {ts}\n")
+        fh.write(f"# rebase-branches.py undo log: {ts}\n")
         fh.write(f"# argv: {sys.argv}\n")
         fh.write("# Initial branch state (paste lines below to revert):\n")
         for h in repo.heads:
