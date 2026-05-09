@@ -34,6 +34,7 @@ UPSTREAM_REMOTE = "upstream"
 UPSTREAM_BRANCH = "rolling"
 UPSTREAM_REF = f"{UPSTREAM_REMOTE}/{UPSTREAM_BRANCH}"
 UNDO_LOG_DIR = Path(__file__).resolve().parent / ".sync-personal-undo"
+UNDO_LOG_KEEP = 5
 
 
 class UndoLog:
@@ -58,6 +59,9 @@ class UndoLog:
 def undo_log(repo: Repo) -> Iterator[UndoLog]:
     """Open a fresh undo log file for this run. Prints path on enter and exit."""
     UNDO_LOG_DIR.mkdir(exist_ok=True)
+    existing = sorted(UNDO_LOG_DIR.glob("*.log"))
+    for old in existing[: max(0, len(existing) - (UNDO_LOG_KEEP - 1))]:
+        old.unlink()
     ts = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     path = UNDO_LOG_DIR / f"{ts}.log"
     fh = path.open("w")
