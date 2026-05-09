@@ -17,6 +17,7 @@ needs a clean tree; --rebase-on-rolling refuses on any dirt).
 """
 
 import argparse
+import datetime as _dt
 import sys
 from pathlib import Path
 
@@ -34,6 +35,35 @@ PERSONAL_BRANCH = "bar/devcontainer"
 UPSTREAM_REMOTE = "upstream"
 UPSTREAM_BRANCH = "rolling"
 UPSTREAM_REF = f"{UPSTREAM_REMOTE}/{UPSTREAM_BRANCH}"
+UNDO_LOG_DIR = Path(__file__).resolve().parent / ".sync-personal-undo"
+
+
+def open_undo_log(repo: Repo) -> tuple[Path, "object"]:
+    """Open a fresh undo log file for this run. Logs every branch change."""
+    UNDO_LOG_DIR.mkdir(exist_ok=True)
+    ts = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    path = UNDO_LOG_DIR / f"{ts}.log"
+    fh = path.open("w")
+    fh.write(f"# sync-personal.py undo log: {ts}\n")
+    fh.write(f"# argv: {sys.argv}\n")
+    fh.write("# Initial branch state (paste lines below to revert):\n")
+    for h in repo.heads:
+        fh.write(f"git update-ref refs/heads/{h.name} {h.commit.hexsha}  "
+                 f"# {h.commit.message.splitlines()[0]}\n")
+    fh.write("#\n# Live branch updates follow:\n")
+    fh.flush()
+    return path, fh
+
+
+def log_branch_pre_change(fh, branch: str, old_sha: str, op: str) -> None:
+    """Record undo line for a branch BEFORE attempting to mutate it.
+
+    Writes the `git update-ref` revert line first so that even if the script
+    crashes between this call and the rebase, the user can recover.
+    """
+    fh.write(f"# {op}: {branch}  pre={old_sha[:12]}\n")
+    fh.write(f"git update-ref refs/heads/{branch} {old_sha}\n")
+    fh.flush()
 
 
 def is_personal(path: str) -> bool:
@@ -106,7 +136,9 @@ def rebase_all_on_rolling(repo: Repo) -> int:
     for h in repo.heads:
         pre_state[h.name] = h.commit.hexsha
 
-    print("=== Pre-change branch state (save for undo) ===")
+    log_path, log_fh = open_undo_log(repo)
+    print(f"Undo log: {log_path}")
+    print("=== Pre-change branch state ===")
     for name, sha in pre_state.items():
         subject = repo.commit(sha).message.splitlines()[0]
         print(f"  {name:30s} {sha[:8]}  {subject}")
@@ -129,6 +161,7 @@ def rebase_all_on_rolling(repo: Repo) -> int:
 
     print(f"=== {PERSONAL_BRANCH} ===")
     print(f"  pre-rebase: {old_devc[:8]}")
+    log_branch_pre_change(log_fh, PERSONAL_BRANCH, old_devc, "rebase onto upstream/rolling")
     try:
         g.checkout(PERSONAL_BRANCH)
         g.rebase(UPSTREAM_REF)
@@ -175,6 +208,8 @@ def rebase_all_on_rolling(repo: Repo) -> int:
             skipped.append(branch)
             continue
 
+        log_branch_pre_change(log_fh, branch, branch_sha,
+                              f"rebase --onto {new_devc[:8]} {old_devc[:8]}")
         try:
             g.checkout(branch)
             g.rebase("--onto", new_devc, old_devc, branch)
@@ -203,11 +238,8 @@ def rebase_all_on_rolling(repo: Repo) -> int:
     except GitCommandError as e:
         print(f"Could not return to {original}: {e.stderr or e}", file=sys.stderr)
 
-    print("\n=== Undo (paste to revert local branches) ===")
-    for name, sha in pre_state.items():
-        if name == UPSTREAM_BRANCH:
-            continue
-        print(f"  git update-ref refs/heads/{name} {sha}")
+    log_fh.close()
+    print(f"\nUndo log written: {log_path}")
 
     if skipped:
         print(f"\nSkipped (not based on {PERSONAL_BRANCH}): {', '.join(skipped)}")
@@ -241,13 +273,20 @@ def main() -> int:
               file=sys.stderr)
         return 1
 
+    log_path, log_fh = open_undo_log(repo)
+    print(f"Undo log: {log_path}")
+
     ahead = commits_ahead(repo, PERSONAL_BRANCH, current)
     if ahead > 0:
         print(f"{PERSONAL_BRANCH} is {ahead} commit(s) ahead of {current}.")
         if not prompt_yes_no(f"Rebase {current} onto {PERSONAL_BRANCH} first?"):
             print("Aborted.")
+            log_fh.close()
             return 1
         g = repo.git
+        pre_sha = repo.heads[current].commit.hexsha
+        log_branch_pre_change(log_fh, current, pre_sha,
+                              f"pre-rebase onto {PERSONAL_BRANCH}")
         try:
             g.rebase(PERSONAL_BRANCH)
         except GitCommandError as e:
@@ -257,6 +296,7 @@ def main() -> int:
                 g.rebase("--abort")
             except GitCommandError:
                 pass
+            log_fh.close()
             return 1
         print(f"Rebased {current} onto {PERSONAL_BRANCH}")
 
@@ -273,6 +313,7 @@ def main() -> int:
 
     if not personal_changes:
         print("No personal-files changes to sync.")
+        log_fh.close()
         return 0
 
     print(f"Personal changes ({len(personal_changes)}):")
@@ -280,6 +321,8 @@ def main() -> int:
         print(f"  {p}")
 
     g = repo.git
+    pre_devc = repo.heads[PERSONAL_BRANCH].commit.hexsha
+    log_branch_pre_change(log_fh, PERSONAL_BRANCH, pre_devc, "personal-files commit")
     g.checkout(PERSONAL_BRANCH)
     g.add("--", *personal_changes)
     g.commit("-m", args.message)
@@ -293,6 +336,9 @@ def main() -> int:
 
     g.checkout(current)
 
+    pre_current = repo.heads[current].commit.hexsha
+    log_branch_pre_change(log_fh, current, pre_current,
+                          f"rebase onto {PERSONAL_BRANCH}")
     try:
         g.rebase(PERSONAL_BRANCH)
     except GitCommandError as e:
@@ -302,6 +348,7 @@ def main() -> int:
             g.rebase("--abort")
         except GitCommandError:
             pass
+        log_fh.close()
         return 1
 
     print(f"Rebased {current} onto {PERSONAL_BRANCH}")
@@ -312,6 +359,8 @@ def main() -> int:
     else:
         print(f"No upstream for {current}; skipping push")
 
+    log_fh.close()
+    print(f"\nUndo log written: {log_path}")
     return 0
 
 
