@@ -27,10 +27,11 @@ so a crash mid-script still leaves the undo trail on disk).
 """
 
 import argparse
+import contextlib
 import datetime as _dt
 import sys
 from pathlib import Path
-from typing import TextIO
+from typing import Iterator, TextIO
 
 from git import GitCommandError, Repo
 
@@ -48,36 +49,53 @@ UPSTREAM_REF = f"{UPSTREAM_REMOTE}/{UPSTREAM_BRANCH}"
 UNDO_LOG_DIR = Path(__file__).resolve().parent / ".sync-personal-undo"
 
 
-def open_undo_log(repo: Repo) -> tuple[Path, TextIO]:
-    """Open a fresh undo log file for this run. Logs every branch change."""
+class UndoLog:
+    """Append-only file recording each branch's pre-mutation SHA.
+
+    Use via `with undo_log(repo) as log:`. Inside the block, call
+    `log.write_pre_change(branch, sha, op)` BEFORE mutating `branch`.
+    On block exit the file is closed and its path printed.
+    """
+
+    def __init__(self, fh: TextIO, path: Path) -> None:
+        self._fh = fh
+        self.path = path
+
+    def write_pre_change(self, branch: str, old_sha: str, op: str) -> None:
+        self._fh.write(f"# {op}: {branch}  pre={old_sha[:12]}\n")
+        self._fh.write(f"git update-ref refs/heads/{branch} {old_sha}\n")
+        self._fh.flush()
+
+
+@contextlib.contextmanager
+def undo_log(repo: Repo) -> Iterator[UndoLog]:
+    """Open a fresh undo log file for this run. Prints path on enter and exit."""
     UNDO_LOG_DIR.mkdir(exist_ok=True)
     ts = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     path = UNDO_LOG_DIR / f"{ts}.log"
     fh = path.open("w")
-    fh.write(f"# sync-personal.py undo log: {ts}\n")
-    fh.write(f"# argv: {sys.argv}\n")
-    fh.write("# Initial branch state (paste lines below to revert):\n")
-    for h in repo.heads:
-        fh.write(f"git update-ref refs/heads/{h.name} {h.commit.hexsha}  "
-                 f"# {h.commit.message.splitlines()[0]}\n")
-    fh.write("#\n# Live branch updates follow:\n")
-    fh.flush()
-    return path, fh
+    try:
+        fh.write(f"# sync-personal.py undo log: {ts}\n")
+        fh.write(f"# argv: {sys.argv}\n")
+        fh.write("# Initial branch state (paste lines below to revert):\n")
+        for h in repo.heads:
+            fh.write(f"git update-ref refs/heads/{h.name} {h.commit.hexsha}  "
+                     f"# {h.commit.message.splitlines()[0]}\n")
+        fh.write("#\n# Live branch updates follow:\n")
+        fh.flush()
+        print(f"Undo log: {path}")
+        yield UndoLog(fh, path)
+    finally:
+        fh.close()
+        print(f"\nUndo log written: {path}")
 
 
-def log_branch_pre_change(fh: TextIO, branch: str, old_sha: str, op: str) -> None:
-    """Record undo line for a branch BEFORE attempting to mutate it."""
-    fh.write(f"# {op}: {branch}  pre={old_sha[:12]}\n")
-    fh.write(f"git update-ref refs/heads/{branch} {old_sha}\n")
-    fh.flush()
-
-
-def rebase_branch(repo: Repo, log_fh: TextIO, branch: str,
+def rebase_branch(repo: Repo, log: UndoLog, branch: str,
                   rebase_args: list[str], op_label: str) -> bool:
     """Checkout `branch`, log pre-SHA, run `git rebase <rebase_args>`."""
     g = repo.git
     pre_sha = repo.heads[branch].commit.hexsha
-    log_branch_pre_change(log_fh, branch, pre_sha, op_label)
+    log.write_pre_change(branch, pre_sha, op_label)
     try:
         g.checkout(branch)
         g.rebase(*rebase_args)
@@ -242,7 +260,7 @@ def _dry_walk_tree(repo: Repo, tree: dict[str, str], new_base: str,
     return todo
 
 
-def rebase_tree(repo: Repo, log_fh: TextIO, tree: dict[str, str],
+def rebase_tree(repo: Repo, log: UndoLog, tree: dict[str, str],
                 new_base: str,
                 branch_point: dict[str, str]) -> tuple[bool, list[str]]:
     """Rebase every branch in `tree` onto its declared parent's new tip.
@@ -275,7 +293,7 @@ def rebase_tree(repo: Repo, log_fh: TextIO, tree: dict[str, str],
         print(f"  pre-rebase: {old_tip[b][:8]}")
         print(f"  --onto {new_parent_sha[:8]} {old_base_sha[:8]}")
 
-        ok = rebase_branch(repo, log_fh, b,
+        ok = rebase_branch(repo, log, b,
                            ["--onto", new_parent_sha, old_base_sha, b],
                            f"rebase --onto {new_parent_sha[:8]} {old_base_sha[:8]}")
         if not ok:
@@ -386,45 +404,38 @@ def commit_personal(repo: Repo, message: str) -> int:
     for p in personal_changes:
         print(f"  {p}")
 
-    log_path, log_fh = open_undo_log(repo)
-    print(f"Undo log: {log_path}")
-
     g = repo.git
-    pre_devc = repo.heads[PERSONAL_BRANCH].commit.hexsha
-    log_branch_pre_change(log_fh, PERSONAL_BRANCH, pre_devc, "personal-files commit")
-    try:
-        g.checkout(PERSONAL_BRANCH)
-        g.add("--", *personal_changes)
-        g.commit("-m", message)
-    except GitCommandError as e:
-        print(f"Commit failed: {e.stderr or e}", file=sys.stderr)
-        log_fh.close()
-        return 1
-
-    print(f"Committed on {PERSONAL_BRANCH}: {message}")
-
-    if has_upstream(repo, PERSONAL_BRANCH):
+    with undo_log(repo) as log:
+        pre_devc = repo.heads[PERSONAL_BRANCH].commit.hexsha
+        log.write_pre_change(PERSONAL_BRANCH, pre_devc, "personal-files commit")
         try:
-            g.push()
-            print(f"Pushed {PERSONAL_BRANCH}")
+            g.checkout(PERSONAL_BRANCH)
+            g.add("--", *personal_changes)
+            g.commit("-m", message)
         except GitCommandError as e:
-            print(f"Push failed: {e.stderr or e}", file=sys.stderr)
-            log_fh.close()
+            print(f"Commit failed: {e.stderr or e}", file=sys.stderr)
             return 1
-    else:
-        print(f"No upstream for {PERSONAL_BRANCH}; skipping push")
 
-    try:
-        g.checkout(current)
-        print(f"Checked out back to {current}")
-    except GitCommandError as e:
-        print(f"Checkout back to {current} failed: {e.stderr or e}",
-              file=sys.stderr)
-        log_fh.close()
-        return 1
+        print(f"Committed on {PERSONAL_BRANCH}: {message}")
 
-    log_fh.close()
-    print(f"\nUndo log written: {log_path}")
+        if has_upstream(repo, PERSONAL_BRANCH):
+            try:
+                g.push()
+                print(f"Pushed {PERSONAL_BRANCH}")
+            except GitCommandError as e:
+                print(f"Push failed: {e.stderr or e}", file=sys.stderr)
+                return 1
+        else:
+            print(f"No upstream for {PERSONAL_BRANCH}; skipping push")
+
+        try:
+            g.checkout(current)
+            print(f"Checked out back to {current}")
+        except GitCommandError as e:
+            print(f"Checkout back to {current} failed: {e.stderr or e}",
+                  file=sys.stderr)
+            return 1
+
     return 0
 
 
@@ -558,8 +569,6 @@ def _run_tree_rebase(repo: Repo, tree: dict[str, str],
         return 0, False
 
     original = repo.active_branch.name
-    log_path, log_fh = open_undo_log(repo)
-    print(f"Undo log: {log_path}")
     print("=== Pre-change branch state ===")
     for h in repo.heads:
         subject = h.commit.message.splitlines()[0]
@@ -571,16 +580,14 @@ def _run_tree_rebase(repo: Repo, tree: dict[str, str],
     print()
     print(f"=== Branches to rebase: {', '.join(todo)} ===")
 
-    ok, failed = rebase_tree(repo, log_fh, tree, new_base, branch_point)
+    with undo_log(repo) as log:
+        ok, failed = rebase_tree(repo, log, tree, new_base, branch_point)
 
-    try:
-        repo.git.checkout(original)
-    except GitCommandError as e:
-        print(f"Could not return to {original}: {e.stderr or e}",
-              file=sys.stderr)
-
-    log_fh.close()
-    print(f"\nUndo log written: {log_path}")
+        try:
+            repo.git.checkout(original)
+        except GitCommandError as e:
+            print(f"Could not return to {original}: {e.stderr or e}",
+                  file=sys.stderr)
 
     if failed:
         print(f"\nFailed: {', '.join(failed)}", file=sys.stderr)
