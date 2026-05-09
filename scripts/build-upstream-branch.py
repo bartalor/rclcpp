@@ -17,7 +17,9 @@ Algorithm
    the paths it touches:
      - "upstream" → cherry-pick onto the clean branch.
      - "personal" → skip.
-     - "mixed"    → ABORT (no upstream PR commit may touch personal paths).
+     - "mixed"    → cherry-pick, then `git rm` the personal paths and
+                    amend so the commit on the clean branch contains
+                    only the upstream paths.
      - "empty"    → skip (shouldn't happen with normal commits).
 3. Move/create branch <name> at the resulting tip.
 
@@ -32,7 +34,7 @@ from pathlib import Path
 from git import GitCommandError, Repo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from personal_paths import PR_EXCLUDED_PATHS, classify_paths
+from personal_paths import PR_EXCLUDED_PATHS, classify_paths, path_matches
 
 UPSTREAM_REF = "upstream/rolling"
 DEV_SUFFIX = "-dev"
@@ -67,28 +69,23 @@ def build_clean_branch(repo: Repo, dev_branch: str, clean_branch: str) -> int:
     print(f"Walking {len(commits)} commits on {dev_branch} since "
           f"{UPSTREAM_REF} (base {base[:8]})")
 
-    plan: list[tuple[str, str, str]] = []
+    plan: list[tuple[str, str, str, list[str]]] = []
     for c in commits:
         sha = c.hexsha
         subject = c.message.splitlines()[0]
         paths = commit_paths(repo, sha)
         kind = classify_paths(paths, PR_EXCLUDED_PATHS)
-        plan.append((sha, kind, subject))
-        if kind == "mixed":
-            print(f"\nABORT: commit {sha[:8]} ({subject}) touches both upstream "
-                  f"and personal paths:", file=sys.stderr)
-            for p in paths:
-                tag = "personal" if classify_paths([p], PR_EXCLUDED_PATHS) == "personal" else "upstream"
-                print(f"  [{tag}] {p}", file=sys.stderr)
-            print("\nSplit the commit so each one touches only one side, "
-                  "then re-run.", file=sys.stderr)
-            return 1
+        personal_in_commit = [p for p in paths
+                              if path_matches(p, PR_EXCLUDED_PATHS)]
+        plan.append((sha, kind, subject, personal_in_commit))
 
-    upstream_count = sum(1 for _, k, _ in plan if k == "upstream")
-    personal_count = sum(1 for _, k, _ in plan if k == "personal")
-    print(f"  upstream: {upstream_count}, personal (skip): {personal_count}")
+    upstream_count = sum(1 for _, k, _, _ in plan if k == "upstream")
+    personal_count = sum(1 for _, k, _, _ in plan if k == "personal")
+    mixed_count = sum(1 for _, k, _, _ in plan if k == "mixed")
+    print(f"  upstream: {upstream_count}, personal (skip): {personal_count}"
+          f", mixed (strip personal): {mixed_count}")
 
-    if upstream_count == 0:
+    if upstream_count == 0 and mixed_count == 0:
         print(f"\nNo upstream commits to put on {clean_branch}; "
               "leaving it untouched.")
         return 1
@@ -100,10 +97,11 @@ def build_clean_branch(repo: Repo, dev_branch: str, clean_branch: str) -> int:
     print(f"\nCreating {clean_branch} at {base[:8]}")
     try:
         g.checkout("--detach", base)
-        for sha, kind, subject in plan:
-            if kind != "upstream":
+        for sha, kind, subject, personal in plan:
+            if kind == "personal":
                 continue
-            print(f"  pick {sha[:8]} {subject}")
+            label = "pick" if kind == "upstream" else "pick+strip"
+            print(f"  {label} {sha[:8]} {subject}")
             try:
                 g.cherry_pick(sha)
             except GitCommandError as e:
@@ -113,6 +111,11 @@ def build_clean_branch(repo: Repo, dev_branch: str, clean_branch: str) -> int:
                 if original_branch:
                     g.checkout(original_branch)
                 return 1
+            if kind == "mixed":
+                for p in personal:
+                    print(f"    strip {p}")
+                g.rm("--", *personal)
+                g.commit("--amend", "--no-edit")
 
         new_tip = repo.head.commit.hexsha
         print(f"\n{clean_branch} -> {new_tip[:8]}")
