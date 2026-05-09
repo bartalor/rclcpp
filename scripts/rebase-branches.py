@@ -114,6 +114,10 @@ def build_branch_tree(repo: Repo, new_base: str,
     Else (used for --rebase-on-personal where new_base == bar/devcontainer):
       - bar/devcontainer is excluded.
       - Every other local branch is rooted on new_base (i.e. bar/devcontainer).
+
+    Upstream-clean siblings (`<x>` where `<x>-dev` also exists locally) are
+    excluded — they're derived artifacts produced by build-upstream-branch.py
+    from their `-dev` source, not branches that should be rebased.
     """
     tree: dict[str, str] = {}
     local_names = {h.name for h in repo.heads}
@@ -126,6 +130,8 @@ def build_branch_tree(repo: Repo, new_base: str,
         if name == PERSONAL_BRANCH:
             continue
         if name == UPSTREAM_BRANCH:
+            continue
+        if f"{name}-dev" in local_names:
             continue
         tree[name] = PERSONAL_BRANCH if include_personal else new_base
     return tree
