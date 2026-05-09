@@ -82,6 +82,16 @@ def prompt_yes_no(question: str) -> bool:
 
 
 def rebase_all_on_rolling(repo: Repo) -> int:
+    """Rebase the dependency tree onto upstream/rolling, preserving structure.
+
+    The tree is: upstream/rolling <- bar/devcontainer <- feature branches.
+    Step 1: rebase bar/devcontainer onto upstream/rolling.
+    Step 2: for every other local branch based on the OLD bar/devcontainer,
+    rebase with `--onto NEW_DEVC OLD_DEVC <branch>` so only the branch's own
+    commits replay (no duplicates of personal commits).
+
+    A branch not based on bar/devcontainer is skipped with a warning.
+    """
     dirty = changed_paths(repo)
     if dirty:
         print("Refusing: working tree is not clean.", file=sys.stderr)
@@ -92,6 +102,16 @@ def rebase_all_on_rolling(repo: Repo) -> int:
     g = repo.git
     original = repo.active_branch.name
 
+    pre_state: dict[str, str] = {}
+    for h in repo.heads:
+        pre_state[h.name] = h.commit.hexsha
+
+    print("=== Pre-change branch state (save for undo) ===")
+    for name, sha in pre_state.items():
+        subject = repo.commit(sha).message.splitlines()[0]
+        print(f"  {name:30s} {sha[:8]}  {subject}")
+    print()
+
     print(f"Fetching {UPSTREAM_REF}...")
     try:
         g.fetch(UPSTREAM_REMOTE, UPSTREAM_BRANCH)
@@ -99,19 +119,65 @@ def rebase_all_on_rolling(repo: Repo) -> int:
         print(f"Fetch failed: {e.stderr or e}", file=sys.stderr)
         return 1
 
-    branches = [h.name for h in repo.heads if h.name != UPSTREAM_BRANCH]
-    failed: list[str] = []
+    if PERSONAL_BRANCH not in pre_state:
+        print(f"Refusing: {PERSONAL_BRANCH} does not exist locally.", file=sys.stderr)
+        return 1
 
-    for branch in branches:
+    old_devc = pre_state[PERSONAL_BRANCH]
+    failed: list[str] = []
+    skipped: list[str] = []
+
+    print(f"=== {PERSONAL_BRANCH} ===")
+    print(f"  pre-rebase: {old_devc[:8]}")
+    try:
+        g.checkout(PERSONAL_BRANCH)
+        g.rebase(UPSTREAM_REF)
+    except GitCommandError as e:
+        print(f"Rebase failed: {e.stderr or e}", file=sys.stderr)
+        try:
+            g.rebase("--abort")
+        except GitCommandError:
+            pass
+        print(f"\nAborting: {PERSONAL_BRANCH} rebase failed; no other branches touched.",
+              file=sys.stderr)
+        try:
+            g.checkout(original)
+        except GitCommandError:
+            pass
+        return 1
+
+    new_devc = repo.heads[PERSONAL_BRANCH].commit.hexsha
+    print(f"  post-rebase: {new_devc[:8]}")
+    if has_upstream(repo, PERSONAL_BRANCH):
+        try:
+            g.push("--force-with-lease")
+            print(f"  pushed (force-with-lease)")
+        except GitCommandError as e:
+            print(f"Push failed: {e.stderr or e}", file=sys.stderr)
+            failed.append(PERSONAL_BRANCH)
+    else:
+        print(f"  no upstream; skipping push")
+
+    other_branches = [
+        name for name in pre_state
+        if name != PERSONAL_BRANCH and name != UPSTREAM_BRANCH
+    ]
+
+    for branch in other_branches:
         print(f"\n=== {branch} ===")
+        branch_sha = pre_state[branch]
+        print(f"  pre-rebase: {branch_sha[:8]}")
+        try:
+            g.merge_base("--is-ancestor", old_devc, branch_sha)
+        except GitCommandError:
+            print(f"  not based on {PERSONAL_BRANCH}@{old_devc[:8]}; skipping",
+                  file=sys.stderr)
+            skipped.append(branch)
+            continue
+
         try:
             g.checkout(branch)
-        except GitCommandError as e:
-            print(f"Checkout failed: {e.stderr or e}", file=sys.stderr)
-            failed.append(branch)
-            continue
-        try:
-            g.rebase(UPSTREAM_REF)
+            g.rebase("--onto", new_devc, old_devc, branch)
         except GitCommandError as e:
             print(f"Rebase failed: {e.stderr or e}", file=sys.stderr)
             try:
@@ -120,24 +186,33 @@ def rebase_all_on_rolling(repo: Repo) -> int:
                 pass
             failed.append(branch)
             continue
-        print(f"Rebased {branch} onto {UPSTREAM_REF}")
+        new_sha = repo.heads[branch].commit.hexsha
+        print(f"  post-rebase: {new_sha[:8]}")
         if has_upstream(repo, branch):
             try:
-                print(g.push("--force-with-lease"))
-                print(f"Pushed {branch} (force-with-lease)")
+                g.push("--force-with-lease")
+                print(f"  pushed (force-with-lease)")
             except GitCommandError as e:
                 print(f"Push failed: {e.stderr or e}", file=sys.stderr)
                 failed.append(branch)
         else:
-            print(f"No upstream for {branch}; skipping push")
+            print(f"  no upstream; skipping push")
 
     try:
         g.checkout(original)
     except GitCommandError as e:
         print(f"Could not return to {original}: {e.stderr or e}", file=sys.stderr)
 
+    print("\n=== Undo (paste to revert local branches) ===")
+    for name, sha in pre_state.items():
+        if name == UPSTREAM_BRANCH:
+            continue
+        print(f"  git update-ref refs/heads/{name} {sha}")
+
+    if skipped:
+        print(f"\nSkipped (not based on {PERSONAL_BRANCH}): {', '.join(skipped)}")
     if failed:
-        print(f"\nFailed branches: {', '.join(failed)}", file=sys.stderr)
+        print(f"\nFailed: {', '.join(failed)}", file=sys.stderr)
         return 1
     return 0
 
