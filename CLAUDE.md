@@ -2,9 +2,10 @@
 
 `bar/devcontainer` is the personal-preferences root: `.devcontainer/`, `.vscode/`, `scripts/`, `CLAUDE.md`, etc. **Always create feature branches off `bar/devcontainer`**, never off `upstream/rolling`. The branch keeps the personal files; only the upstream PR excludes them.
 
-`scripts/sync-personal.py` has three mutually-exclusive modes; all precheck everything and abort on any problem before mutating anything. The script's `PERSONAL_PATHS` list is the source of truth for what counts as personal.
+To commit personal-file changes: switch to `bar/devcontainer`, commit and push there, then switch back and run `--rebase-on-personal` to fan the new tip out to feature branches.
 
-- `python3 scripts/sync-personal.py --commit-personal -m "..."` — commit dirty personal files on `bar/devcontainer`, push, checkout back to the original branch. Refuses if non-personal files are dirty or if no personal files have changed.
+`scripts/sync-personal.py` has two mutually-exclusive modes; both precheck everything and abort on any problem before mutating anything.
+
 - `python3 scripts/sync-personal.py --rebase-on-personal` — rebase every other local branch onto `bar/devcontainer` (tree-aware, no duplicate commits). Refuses on a dirty tree.
 - `python3 scripts/sync-personal.py --rebase-on-rolling` — fetch `upstream/rolling`, rebase `bar/devcontainer` onto it, then rebase every other local branch onto `bar/devcontainer`'s new tip (tree-aware). Refuses on a dirty tree or any stale branch.
 
