@@ -1,6 +1,10 @@
 #!/bin/bash
 set -eo pipefail
 
+[ -f /.dockerenv ] || { echo "ERROR: $0 must run inside the devcontainer, not on the host" >&2; exit 1; }
+[ -n "$OVERLAY_WS" ] || { echo "ERROR: \$OVERLAY_WS unset — devcontainer not initialized" >&2; exit 1; }
+[ -n "$ROS_DISTRO" ] || { echo "ERROR: \$ROS_DISTRO unset — devcontainer not initialized" >&2; exit 1; }
+
 git config --global --add safe.directory "*"
 
 # install overlay deps from mounted source
