@@ -15,6 +15,13 @@ if ! ssh-add -l >/dev/null 2>&1; then
     echo "ssh-add: loaded $HOME/.ssh/id_ed25519 into host agent"
 fi
 
+# Allow unprivileged perf profiling (kernel + user) so `perf record` works
+# inside the container. Resets on reboot, so we re-apply here.
+if [ "$(cat /proc/sys/kernel/perf_event_paranoid)" -gt 1 ]; then
+    sudo sysctl -q kernel.perf_event_paranoid=1
+    echo "sysctl: kernel.perf_event_paranoid=1"
+fi
+
 CONTAINER=$(docker ps \
     --filter "label=devcontainer.local_folder=$REPO_ROOT" \
     --format "{{.ID}}" \
