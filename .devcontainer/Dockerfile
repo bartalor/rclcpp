@@ -32,6 +32,10 @@ RUN apt-get update && \
       openssh-client \
       ccache \
       lld \
+      linux-tools-generic \
+      heaptrack \
+      valgrind \
+      libc6-dbg \
       python3-pip \
       python3-colcon-common-extensions \
       python3-colcon-mixin \
