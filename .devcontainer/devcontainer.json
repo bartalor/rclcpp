@@ -26,7 +26,7 @@
         "ROS_DOMAIN_ID": "42"
     },
     "remoteEnv": {
-        "OVERLAY_MIXINS": "release ccache compile-commands lld",
+        "OVERLAY_MIXINS": "rel-with-deb-info ccache compile-commands lld",
         "CCACHE_DIR": "/tmp/.ccache"
     },
     "runArgs": [
