@@ -126,21 +126,29 @@ def build_clean_branch(repo: Repo, dev_branch: str, clean_branch: str) -> int:
         new_tip = repo.head.commit.hexsha
         print(f"\n{clean_branch} -> {new_tip[:8]}")
 
+        keep_prior = False
         if prior_tip is not None:
             if prior_tip == new_tip:
                 print(f"  unchanged (already at {new_tip[:8]})")
+                keep_prior = True
             else:
                 tree_diff = g.diff("--stat", prior_tip, new_tip).strip()
-                print(f"  changed: {prior_tip[:8]} -> {new_tip[:8]}")
-                if tree_diff:
-                    print(f"  tree diff vs old tip:\n{tree_diff}")
+                if not tree_diff:
+                    print(f"  rebuild produced identical tree to {prior_tip[:8]}; "
+                          "keeping prior tip (no force-update)")
+                    keep_prior = True
                 else:
-                    print("  tree diff vs old tip: (identical tree, "
-                          "different commits — likely metadata only)")
+                    print(f"  changed: {prior_tip[:8]} -> {new_tip[:8]}")
+                    print(f"  tree diff vs old tip:\n{tree_diff}")
 
-        if clean_branch in existing_branches:
+        if keep_prior:
+            print(f"  no-op: {clean_branch} stays at {prior_tip[:8]}")
+        elif clean_branch in existing_branches:
+            print(f"  force-updating {clean_branch}: "
+                  f"{prior_tip[:8]} -> {new_tip[:8]}")
             g.branch("-f", clean_branch, new_tip)
         else:
+            print(f"  creating {clean_branch} at {new_tip[:8]}")
             g.branch(clean_branch, new_tip)
     finally:
         if original_branch:
