@@ -23,6 +23,7 @@ so a crash mid-script still leaves the undo trail on disk).
 import argparse
 import contextlib
 import datetime as _dt
+import subprocess
 import sys
 from pathlib import Path
 from typing import Iterator, TextIO
@@ -282,6 +283,25 @@ def _dry_walk_tree(repo: Repo, tree: dict[str, str], new_base: str,
             to_rebase.append(b)
             to_push.append(b)
     return to_rebase, to_push
+
+
+def github_ssh_problem() -> str | None:
+    """Return a problem string if SSH auth to github.com fails, else None.
+
+    Pure auth handshake (`ssh -T -o BatchMode=yes git@github.com`) — no git,
+    no ref negotiation. GitHub returns exit 1 with 'successfully
+    authenticated' on success.
+    """
+    result = subprocess.run(
+        ["ssh", "-T", "-o", "BatchMode=yes",
+         "-o", "ConnectTimeout=5", "git@github.com"],
+        capture_output=True, text=True)
+    if result.returncode == 1 and "successfully authenticated" in (
+            result.stdout + result.stderr):
+        return None
+    msg = (result.stderr or result.stdout or "").strip().splitlines()
+    tail = msg[-1] if msg else f"exit {result.returncode}"
+    return f"SSH auth to github.com failed: {tail}"
 
 
 def _diverged_from_origin(repo: Repo, branch: str) -> bool:
@@ -550,6 +570,11 @@ def main() -> int:
                       help=f"Rebase bar/devcontainer onto {UPSTREAM_REF} and "
                            "every other local branch onto bar/devcontainer.")
     args = ap.parse_args()
+
+    ssh_problem = github_ssh_problem()
+    if ssh_problem:
+        print(f"Refusing: {ssh_problem}", file=sys.stderr)
+        return 1
 
     repo = Repo(Path(__file__).resolve().parent.parent)
 
