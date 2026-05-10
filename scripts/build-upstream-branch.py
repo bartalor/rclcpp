@@ -95,7 +95,7 @@ def build_clean_branch(repo: Repo, dev_branch: str, clean_branch: str) -> int:
                  if clean_branch in existing_branches else None)
     if prior_tip is not None:
         print(f"\nNote: {clean_branch} already exists at {prior_tip[:8]}; "
-              "will overwrite (branch is recomputed from -dev each run).")
+              "will be force-updated only if the rebuilt tree differs.")
 
     original_branch = (repo.active_branch.name
                        if not repo.head.is_detached else None)
