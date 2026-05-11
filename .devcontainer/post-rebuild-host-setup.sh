@@ -22,6 +22,13 @@ if [ "$(cat /proc/sys/kernel/perf_event_paranoid)" -gt 1 ]; then
     echo "sysctl: kernel.perf_event_paranoid=1"
 fi
 
+# Expose kernel symbol addresses so `perf report` resolves kernel frames
+# instead of showing raw 0xffffffff... hex. Resets on reboot.
+if [ "$(cat /proc/sys/kernel/kptr_restrict)" -ne 0 ]; then
+    sudo sysctl -q kernel.kptr_restrict=0
+    echo "sysctl: kernel.kptr_restrict=0"
+fi
+
 CONTAINER=$(docker ps \
     --filter "label=devcontainer.local_folder=$REPO_ROOT" \
     --format "{{.ID}}" \
