@@ -33,6 +33,8 @@
         "--net=host",
         "--pid=host",
         "--ipc=host",
+        "--cap-add=PERFMON",
+        "--cap-add=SYS_PTRACE",
         "-e", "DISPLAY=${env:DISPLAY}"
     ],
     "mounts": [
