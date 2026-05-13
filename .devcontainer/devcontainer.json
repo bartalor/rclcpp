@@ -16,7 +16,8 @@
             "settings": {
                 "clangd.arguments": [
                     "--compile-commands-dir=/opt/overlay_ws/build/rclcpp"
-                ]
+                ],
+                "claudeCode.claudeProcessWrapper": "/home/ubuntu/.claude/system-prompt/wrapper.sh"
             }
         }
     },
@@ -41,6 +42,7 @@
         "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
         "source=${localEnv:HOME}/.claude,target=/home/ubuntu/.claude,type=bind",
         "source=${localEnv:HOME}/.claude/settings.json,target=/home/ubuntu/.claude/settings.json,type=bind,readonly",
+        "source=${localEnv:HOME}/.claude/system-prompt,target=/home/ubuntu/.claude/system-prompt,type=bind,readonly",
         "source=${localEnv:HOME}/.config/git/ignore,target=/home/ubuntu/.config/git/ignore,type=bind,readonly",
         "source=${localEnv:HOME}/.config/gh,target=/home/ubuntu/.config/gh,type=bind",
         "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
