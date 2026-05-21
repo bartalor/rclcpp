@@ -2,6 +2,9 @@
 personal = "bar/devcontainer"
 upstream_remote = "upstream"
 upstream_branch = "rolling"
+working_branches = [
+    "bar/issue-2898",
+]
 
 [paths]
 personal_branch = [
