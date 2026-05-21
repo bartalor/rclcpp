@@ -1,0 +1,23 @@
+[branches]
+personal = "bar/devcontainer"
+upstream_remote = "upstream"
+upstream_branch = "rolling"
+
+[paths]
+personal_branch = [
+    ".devcontainer/",
+    ".vscode/",
+    "scripts/",
+    ".claude/",
+    "CLAUDE.md",
+    "renovate.json",
+]
+pr_excluded = [
+    ".devcontainer/",
+    ".vscode/",
+    "scripts/",
+    ".claude/",
+    "CLAUDE.md",
+    "renovate.json",
+    "PR_DESCRIPTION.md",
+]
