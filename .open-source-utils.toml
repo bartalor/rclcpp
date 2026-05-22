@@ -10,7 +10,6 @@ working_branches = [
 personal_branch = [
     ".devcontainer/",
     ".vscode/",
-    "scripts/",
     ".claude/",
     "CLAUDE.md",
     "renovate.json",
@@ -18,7 +17,6 @@ personal_branch = [
 pr_excluded = [
     ".devcontainer/",
     ".vscode/",
-    "scripts/",
     ".claude/",
     "CLAUDE.md",
     "renovate.json",
