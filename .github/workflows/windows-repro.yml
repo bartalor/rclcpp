@@ -45,26 +45,12 @@ jobs:
           git -C src/ros2/system_tests log -1 --oneline
 
       - name: colcon build (rclcpp + test_rosidl_buffer and deps)
-        shell: cmd
-        run: |
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          colcon build ^
-            --event-handlers console_cohesion+ console_package_list+ ^
-            --packages-up-to rclcpp test_rosidl_buffer ^
-            --cmake-args -DBUILD_TESTING=ON -DINSTALL_EXAMPLES=OFF -DSECURITY=ON -DAPPEND_PROJECT_NAME_TO_INCLUDEDIR=ON -DCMAKE_BUILD_TYPE=None
+        shell: pwsh
+        run: .github/scripts/windows-build.ps1
 
       - name: colcon test (rclcpp + test_rosidl_buffer)
-        shell: cmd
-        run: |
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
-          call install\local_setup.bat
-          colcon test ^
-            --event-handlers console_cohesion+ ^
-            --packages-select rclcpp test_rosidl_buffer ^
-            --retest-until-pass 2 ^
-            --ctest-args -LE xfail ^
-            --pytest-args -m "not xfail" ^
-            --executor sequential
+        shell: pwsh
+        run: .github/scripts/windows-test.ps1
 
       - name: colcon test-result
         if: always()
