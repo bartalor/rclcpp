@@ -1,0 +1,82 @@
+name: windows-repro
+
+on:
+  workflow_dispatch:
+
+jobs:
+  windows-rolling-source-build:
+    runs-on: windows-latest
+    timeout-minutes: 350
+
+    strategy:
+      fail-fast: false
+      matrix:
+        rmw:
+          - rmw_fastrtps_cpp
+          - rmw_cyclonedds_cpp
+
+    env:
+      CI_REPOS_URL: https://gist.githubusercontent.com/fujitatomoya/e96e535bdc812744725b6237e9eb22e6/raw/ab84ebe82133d581d33d732a722c20660dfc487c/ros2.repos
+      RMW_IMPLEMENTATION: ${{ matrix.rmw }}
+
+    steps:
+      - name: Configure git long paths
+        shell: pwsh
+        run: git config --global core.longpaths true
+
+      - name: Setup ROS 2 toolchain
+        uses: ros-tooling/setup-ros@v0.7
+
+      - name: Fetch pinned ros2.repos manifest
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path src | Out-Null
+          Invoke-WebRequest -Uri $env:CI_REPOS_URL -OutFile ros2.repos
+          Get-Content ros2.repos | Select-Object -First 5
+
+      - name: vcs import sources
+        shell: pwsh
+        run: vcs import --workers 4 src --input ros2.repos
+
+      - name: Show key package commits
+        shell: pwsh
+        run: |
+          git -C src/bartalor/rclcpp log -1 --oneline
+          git -C src/ros2/system_tests log -1 --oneline
+
+      - name: colcon build (rclcpp + test_rosidl_buffer and deps)
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          colcon build ^
+            --event-handlers console_cohesion+ console_package_list+ ^
+            --packages-up-to rclcpp test_rosidl_buffer ^
+            --cmake-args -DBUILD_TESTING=ON -DINSTALL_EXAMPLES=OFF -DSECURITY=ON -DAPPEND_PROJECT_NAME_TO_INCLUDEDIR=ON -DCMAKE_BUILD_TYPE=None
+
+      - name: colcon test (rclcpp + test_rosidl_buffer)
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          call install\local_setup.bat
+          colcon test ^
+            --event-handlers console_cohesion+ ^
+            --packages-select rclcpp test_rosidl_buffer ^
+            --retest-until-pass 2 ^
+            --ctest-args -LE xfail ^
+            --pytest-args -m "not xfail" ^
+            --executor sequential
+
+      - name: colcon test-result
+        if: always()
+        shell: cmd
+        run: colcon test-result --verbose
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.rmw }}
+          path: |
+            build/**/test_results/**/*.xml
+            log/**/*
+          retention-days: 7
