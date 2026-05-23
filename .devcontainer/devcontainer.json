@@ -16,8 +16,7 @@
             "settings": {
                 "clangd.arguments": [
                     "--compile-commands-dir=/opt/overlay_ws/build/rclcpp"
-                ],
-                "claudeCode.claudeProcessWrapper": "/home/ubuntu/.claude/system-prompt/wrapper.sh"
+                ]
             }
         }
     },
