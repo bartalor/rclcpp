@@ -13,7 +13,6 @@ jobs:
       matrix:
         rmw:
           - rmw_fastrtps_cpp
-          - rmw_cyclonedds_cpp
 
     env:
       CI_REPOS_URL: https://gist.githubusercontent.com/fujitatomoya/e96e535bdc812744725b6237e9eb22e6/raw/ab84ebe82133d581d33d732a722c20660dfc487c/ros2.repos
@@ -23,6 +22,18 @@ jobs:
       - name: Configure git long paths
         shell: pwsh
         run: git config --global core.longpaths true
+
+      - name: Check manifest URL reachable
+        shell: pwsh
+        run: Invoke-WebRequest -Method Head -Uri $env:CI_REPOS_URL -UseBasicParsing | Out-Null
+
+      - name: Upgrade pip and setuptools (Python 3.12 ImpImporter fix)
+        shell: pwsh
+        run: python -m pip install --upgrade pip setuptools
+
+      - name: Verify pkg_resources imports
+        shell: pwsh
+        run: python -c "import pkg_resources"
 
       - name: Setup ROS 2 toolchain
         uses: ros-tooling/setup-ros@v0.7
@@ -37,6 +48,14 @@ jobs:
           New-Item -ItemType Directory -Force -Path src | Out-Null
           Invoke-WebRequest -Uri $env:CI_REPOS_URL -OutFile ros2.repos
           Get-Content ros2.repos | Select-Object -First 5
+
+      - name: Verify manifest has required entries
+        shell: pwsh
+        run: |
+          $manifest = Get-Content ros2.repos -Raw
+          foreach ($entry in @("bartalor/rclcpp", "ros2/system_tests")) {
+            if ($manifest -notmatch [regex]::Escape($entry)) { throw "Manifest missing entry: $entry" }
+          }
 
       - name: vcs import sources
         shell: pwsh
