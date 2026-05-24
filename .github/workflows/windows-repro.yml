@@ -2,6 +2,10 @@ name: windows-repro
 
 on:
   workflow_dispatch:
+    inputs:
+      matrix:
+        description: "JSON matrix (built by .github/windows-repro-run.py)"
+        required: true
 
 jobs:
   windows-rolling-source-build:
@@ -10,9 +14,7 @@ jobs:
 
     strategy:
       fail-fast: false
-      matrix:
-        rmw:
-          - rmw_fastrtps_cpp
+      matrix: ${{ fromJSON(inputs.matrix) }}
 
     env:
       CI_REPOS_URL: https://gist.githubusercontent.com/fujitatomoya/e96e535bdc812744725b6237e9eb22e6/raw/ab84ebe82133d581d33d732a722c20660dfc487c/ros2.repos
@@ -40,7 +42,7 @@ jobs:
 
       - name: Preflight (env)
         shell: pwsh
-        run: .github/scripts/windows-preflight-env.ps1
+        run: .github/ci-scripts/windows-preflight-env.ps1
 
       - name: Fetch pinned ros2.repos manifest
         shell: pwsh
@@ -63,7 +65,7 @@ jobs:
 
       - name: Preflight (sources)
         shell: pwsh
-        run: .github/scripts/windows-preflight-sources.ps1
+        run: .github/ci-scripts/windows-preflight-sources.ps1
 
       - name: Show key package commits
         shell: pwsh
@@ -73,11 +75,11 @@ jobs:
 
       - name: colcon build (rclcpp + test_rosidl_buffer and deps)
         shell: pwsh
-        run: .github/scripts/windows-build.ps1
+        run: .github/ci-scripts/windows-build.ps1
 
       - name: colcon test (rclcpp + test_rosidl_buffer)
         shell: pwsh
-        run: .github/scripts/windows-test.ps1
+        run: .github/ci-scripts/windows-test.ps1
 
       - name: colcon test-result
         if: always()
