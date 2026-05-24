@@ -34,6 +34,17 @@ jobs:
         with:
           python-version: '3.8'
 
+      - name: Pre-install choco packages with retry (setup-ros has no retry on 5xx)
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          shell: pwsh
+          command: |
+            choco install --limit-output --no-progress --yes wget 7zip lcov
+            choco install --limit-output --no-progress --yes cppcheck --version 1.90
+
       - name: Setup ROS 2 toolchain
         uses: ros-tooling/setup-ros@v0.7
 
