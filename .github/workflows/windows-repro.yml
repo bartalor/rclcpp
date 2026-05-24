@@ -25,6 +25,9 @@ jobs:
         shell: pwsh
         run: git config --global core.longpaths true
 
+      - name: Checkout repo (for .github/ci-scripts)
+        uses: actions/checkout@v4
+
       - name: Check manifest URL reachable
         shell: pwsh
         run: Invoke-WebRequest -Method Head -Uri $env:CI_REPOS_URL -UseBasicParsing | Out-Null
