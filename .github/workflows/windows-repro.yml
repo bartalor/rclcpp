@@ -96,13 +96,13 @@ jobs:
           $vcvars = Join-Path $vsPath "VC\Auxiliary\Build\vcvars64.bat"
           "VCVARS=$vcvars" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: colcon build (rclcpp + test_rosidl_buffer and deps)
+      - name: colcon build (mirrors ci.ros2.org build #27999 invocation)
         shell: cmd
-        run: call "%VCVARS%" && pixi run colcon build --base-paths src --event-handlers console_cohesion+ console_package_list+ --packages-up-to rclcpp test_rosidl_buffer --cmake-args -DBUILD_TESTING=ON -DINSTALL_EXAMPLES=OFF -DSECURITY=ON -DAPPEND_PROJECT_NAME_TO_INCLUDEDIR=ON -DCMAKE_BUILD_TYPE=None
+        run: call "%VCVARS%" && pixi run colcon build --base-paths src --merge-install --event-handlers console_cohesion+ console_package_list+ --packages-above-and-dependencies rclcpp --cmake-args -DBUILD_TESTING=ON --no-warn-unused-cli -DINSTALL_EXAMPLES=OFF -DSECURITY=ON -DAPPEND_PROJECT_NAME_TO_INCLUDEDIR=ON
 
-      - name: colcon test (rclcpp + test_rosidl_buffer)
+      - name: colcon test (focused on rclcpp + test_rosidl_buffer)
         shell: cmd
-        run: call "%VCVARS%" && call install\local_setup.bat && pixi run colcon test --base-paths src --event-handlers console_cohesion+ --packages-select rclcpp test_rosidl_buffer --retest-until-pass 2 --ctest-args -LE xfail --pytest-args -m "not xfail" --executor sequential
+        run: call "%VCVARS%" && call install\local_setup.bat && pixi run colcon test --base-paths src --merge-install --event-handlers console_cohesion+ --packages-select rclcpp test_rosidl_buffer --retest-until-pass 2 --ctest-args -LE xfail --pytest-args -m "not xfail" --executor sequential
 
       - name: colcon test-result
         if: always()
