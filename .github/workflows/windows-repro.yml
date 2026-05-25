@@ -27,6 +27,7 @@ jobs:
 
     env:
       RMW_IMPLEMENTATION: ${{ matrix.rmw }}
+      ROS_DOMAIN_ID: 1
 
     steps:
       - name: Configure git long paths
