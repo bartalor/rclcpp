@@ -1,5 +1,9 @@
 name: windows-repro
 
+# Replicates ci.ros2.org Windows build #27999 environment using pixi.
+# pixi.toml is pinned to the commit of ros2/ros2@rolling that was HEAD when
+# build #27999 started (2026-05-14T22:49:27Z).
+
 on:
   workflow_dispatch:
     inputs:
@@ -7,9 +11,14 @@ on:
         description: "JSON matrix (built by .github/windows-repro-run.py)"
         required: true
 
+env:
+  CI_REPOS_URL: https://gist.githubusercontent.com/fujitatomoya/e96e535bdc812744725b6237e9eb22e6/raw/ab84ebe82133d581d33d732a722c20660dfc487c/ros2.repos
+  PIXI_VERSION: v0.41.0
+  PIXI_TOML_SHA: a22d7b50717dad7c8b3b2bfb36055684600925a5
+
 jobs:
   windows-rolling-source-build:
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 350
 
     strategy:
@@ -17,7 +26,6 @@ jobs:
       matrix: ${{ fromJSON(inputs.matrix) }}
 
     env:
-      CI_REPOS_URL: https://gist.githubusercontent.com/fujitatomoya/e96e535bdc812744725b6237e9eb22e6/raw/ab84ebe82133d581d33d732a722c20660dfc487c/ros2.repos
       RMW_IMPLEMENTATION: ${{ matrix.rmw }}
 
     steps:
@@ -25,35 +33,37 @@ jobs:
         shell: pwsh
         run: git config --global core.longpaths true
 
-      - name: Checkout repo (for .github/ci-scripts)
+      - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Check manifest URL reachable
         shell: pwsh
         run: Invoke-WebRequest -Method Head -Uri $env:CI_REPOS_URL -UseBasicParsing | Out-Null
 
-      - name: Setup Python 3.8 (REP 2000 target for ROS 2 on Windows)
-        uses: actions/setup-python@v5
+      - name: Install pixi
+        uses: prefix-dev/setup-pixi@v0.8.1
         with:
-          python-version: '3.8'
+          pixi-version: ${{ env.PIXI_VERSION }}
+          run-install: false
 
-      - name: Pre-install choco packages with retry (setup-ros has no retry on 5xx)
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 10
-          max_attempts: 3
-          retry_wait_seconds: 30
-          shell: pwsh
-          command: |
-            choco install --limit-output --no-progress --yes wget 7zip lcov
-            choco install --limit-output --no-progress --yes cppcheck --version 1.90
-
-      - name: Setup ROS 2 toolchain
-        uses: ros-tooling/setup-ros@v0.7
-
-      - name: Preflight (env)
+      - name: Fetch pinned pixi.toml from ros2/ros2
         shell: pwsh
-        run: .github/ci-scripts/windows-preflight-env.ps1
+        run: |
+          $url = "https://raw.githubusercontent.com/ros2/ros2/$env:PIXI_TOML_SHA/pixi.toml"
+          Invoke-WebRequest -Uri $url -OutFile pixi.toml
+          Get-Content pixi.toml | Select-Object -First 8
+
+      - name: pixi install (frozen)
+        shell: pwsh
+        run: pixi install
+
+      - name: Bump colcon-ros-domain-id-coordinator (mirrors ci.ros2.org Dockerfile step 23)
+        shell: pwsh
+        run: pixi run pip install "colcon-ros-domain-id-coordinator >= 0.2.3"
+
+      - name: pixi list (record exact resolved versions)
+        shell: pwsh
+        run: pixi list
 
       - name: Fetch pinned ros2.repos manifest
         shell: pwsh
@@ -72,30 +82,32 @@ jobs:
 
       - name: vcs import sources
         shell: pwsh
-        run: vcs import --workers 4 src --input ros2.repos
+        run: pixi run vcs import --workers 4 src --input ros2.repos
 
-      - name: Preflight (sources)
+      - name: Show all imported package commits
         shell: pwsh
-        run: .github/ci-scripts/windows-preflight-sources.ps1
+        run: pixi run vcs log -l1 src
 
-      - name: Show key package commits
+      - name: Resolve vcvars64.bat path
         shell: pwsh
         run: |
-          git -C src/bartalor/rclcpp log -1 --oneline
-          git -C src/ros2/system_tests log -1 --oneline
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $vcvars = Join-Path $vsPath "VC\Auxiliary\Build\vcvars64.bat"
+          "VCVARS=$vcvars" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: colcon build (rclcpp + test_rosidl_buffer and deps)
-        shell: pwsh
-        run: .github/ci-scripts/windows-build.ps1
+        shell: cmd
+        run: call "%VCVARS%" && pixi run colcon build --base-paths src --event-handlers console_cohesion+ console_package_list+ --packages-up-to rclcpp test_rosidl_buffer --cmake-args -DBUILD_TESTING=ON -DINSTALL_EXAMPLES=OFF -DSECURITY=ON -DAPPEND_PROJECT_NAME_TO_INCLUDEDIR=ON -DCMAKE_BUILD_TYPE=None
 
       - name: colcon test (rclcpp + test_rosidl_buffer)
-        shell: pwsh
-        run: .github/ci-scripts/windows-test.ps1
+        shell: cmd
+        run: call "%VCVARS%" && call install\local_setup.bat && pixi run colcon test --base-paths src --event-handlers console_cohesion+ --packages-select rclcpp test_rosidl_buffer --retest-until-pass 2 --ctest-args -LE xfail --pytest-args -m "not xfail" --executor sequential
 
       - name: colcon test-result
         if: always()
         shell: cmd
-        run: colcon test-result --verbose
+        run: pixi run colcon test-result --verbose
 
       - name: Upload test results
         if: always()
