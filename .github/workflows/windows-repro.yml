@@ -13,7 +13,7 @@ on:
 
 concurrency:
   group: windows-repro-${{ github.event.inputs.matrix }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   CI_REPOS_URL: https://gist.githubusercontent.com/fujitatomoya/e96e535bdc812744725b6237e9eb22e6/raw/ab84ebe82133d581d33d732a722c20660dfc487c/ros2.repos
