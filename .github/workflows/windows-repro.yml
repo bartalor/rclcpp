@@ -96,21 +96,21 @@ jobs:
         shell: pwsh
         run: pixi run vcs log -l1 src
 
-      - name: Resolve vcvars64.bat path
+      - name: Resolve vcvarsall.bat path (mirrors ci.ros2.org x86_amd64 cross-toolchain)
         shell: pwsh
         run: |
           $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
           $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-          $vcvars = Join-Path $vsPath "VC\Auxiliary\Build\vcvars64.bat"
+          $vcvars = Join-Path $vsPath "VC\Auxiliary\Build\vcvarsall.bat"
           "VCVARS=$vcvars" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: colcon build (mirrors ci.ros2.org build #27999 invocation)
         shell: cmd
-        run: call "%VCVARS%" && pixi run colcon build --base-paths src --merge-install --event-handlers console_cohesion+ console_package_list+ --packages-above-and-dependencies rclcpp --cmake-args -DBUILD_TESTING=ON --no-warn-unused-cli -DINSTALL_EXAMPLES=OFF -DSECURITY=ON -DAPPEND_PROJECT_NAME_TO_INCLUDEDIR=ON
+        run: call "%VCVARS%" x86_amd64 && pixi run colcon build --base-paths src --merge-install --event-handlers console_cohesion+ console_package_list+ --packages-above-and-dependencies rclcpp --cmake-args -DBUILD_TESTING=ON --no-warn-unused-cli -DINSTALL_EXAMPLES=OFF -DSECURITY=ON -DAPPEND_PROJECT_NAME_TO_INCLUDEDIR=ON
 
       - name: colcon test (focused on rclcpp + test_rosidl_buffer)
         shell: cmd
-        run: call "%VCVARS%" && call install\local_setup.bat && pixi run colcon test --base-paths src --merge-install --event-handlers console_cohesion+ --packages-select rclcpp test_rosidl_buffer --retest-until-pass 2 --ctest-args -LE xfail --pytest-args -m "not xfail" --executor sequential
+        run: call "%VCVARS%" x86_amd64 && call install\local_setup.bat && pixi run colcon test --base-paths src --merge-install --event-handlers console_cohesion+ --packages-select rclcpp test_rosidl_buffer --retest-until-pass 2 --ctest-args -LE xfail --pytest-args -m "not xfail" --executor sequential
 
       - name: colcon test-result
         if: always()
