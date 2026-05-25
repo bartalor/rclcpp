@@ -80,9 +80,16 @@ jobs:
             if ($manifest -notmatch [regex]::Escape($entry)) { throw "Manifest missing entry: $entry" }
           }
 
+      - name: Set up colcon mixins (mirrors ci.ros2.org)
+        shell: pwsh
+        run: |
+          pixi run colcon mixin remove default 2>$null
+          pixi run colcon mixin add default https://raw.githubusercontent.com/colcon/colcon-mixin-repository/master/index.yaml
+          pixi run colcon mixin update default
+
       - name: vcs import sources
         shell: pwsh
-        run: pixi run vcs import --workers 4 src --input ros2.repos
+        run: pixi run vcs import --force --retry 5 src --input ros2.repos
 
       - name: Show all imported package commits
         shell: pwsh
@@ -107,7 +114,7 @@ jobs:
       - name: colcon test-result
         if: always()
         shell: cmd
-        run: pixi run colcon test-result --verbose
+        run: pixi run colcon test-result --all --verbose
 
       - name: Upload test results
         if: always()
