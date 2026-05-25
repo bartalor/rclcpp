@@ -17,40 +17,62 @@ description: Use when the user wants to reproduce a specific ci.ros2.org build (
 
 ## When this applies
 
-The user wants to debug a failing upstream CI test by re-running the same build in their own GitHub Actions workflow. The goal is **bit-faithful reproduction of a single build number** — not "a ROS2 CI" in general.
+The user wants to debug failing upstream CI tests. The goal is **the shortest iteration that reproduces the failure**, with the workflow structured so each fidelity layer (build scope, env freshness, src freshness, test selection, retry/executor settings) can be raised toward a faithful reproduction of the reference build only when needed. Start cheap; climb toward the reference if cheap doesn't reproduce.
 
 ## Capturing the reference build log
 
 You need the full ci.ros2.org build log cached locally before any checks work. The URL pattern is `https://ci.ros2.org/job/<job_name>/<build_number>/consoleText`. Some jobs need credentials.
 
-**Hard rule:** the ci.ros2.org auth token must NEVER enter Claude's context. The user has it in `~/.netrc` (which is on Claude's settings.json deny list — don't try to read it, don't ask the user to share it, don't suggest where it might be). The user fetches the log themselves; you work from the cached file (e.g. `/tmp/ci_<job>_<NNNNN>.log`).
+**Hard rule:** the ci.ros2.org auth token must NEVER enter Claude's context. The user has it in `~/.netrc` (which is on Claude's settings.json deny list — don't try to read it, don't ask the user to share it, don't suggest where it might be). The user fetches the log themselves, or invokes `curl --netrc` so the token stays out of arguments and output. You work from cached files (e.g. `/tmp/ci_<job>_<NNNNN>.log`, `/tmp/ci_<job>_<NNNNN>_testreport.json` from the `testReport/api/json` endpoint).
 
-## What we mirror (and how)
+## Identify the failing tests first
 
-A GitHub Actions workflow that pins everything the upstream build pinned. Extract pin values from the build's log; do not invent or "tidy up". The set of pins is platform-specific (see platform sections below).
+Before designing any layers, pull the list of failing tests from the reference build's `testReport/api/json?tree=failCount,suites[cases[className,name,status]]` endpoint. Note the failing test cases, the package(s) they live in, and the RMW(s) involved. This drives every layer choice below — there's no point building packages whose tests don't appear in the failure list.
 
-The build/test colcon invocations come **verbatim** from the cached log — search for `==>` markers around `colcon build` and `colcon test` lines. The bug class we're trying to avoid is exactly the silent divergence from hand-written args.
+## Fidelity layers (cheapest → most faithful)
 
-## Generic checks (run for any build)
+The workflow exposes independent fidelity knobs. Start at the cheapest combination that could plausibly reproduce the failures; raise one knob at a time if it doesn't reproduce. Each knob is an independent dimension — you don't have to raise them in lockstep.
 
-Each check exists to catch the same class of bug: **a silent divergence that explodes tens of minutes into the build**.
+1. **Build scope.**
+   - cheapest: `--packages-up-to <failing-test-pkg>` (or `--packages-select` if a binary overlay supplies all deps — rare; verify with `pixi list` or equivalent that the deps actually exist as binaries).
+   - faithful: the exact `--packages-...` flag from the reference build's colcon invocation (see "What to mirror" below).
+2. **Env source.**
+   - cheapest: cache the env across runs.
+   - faithful: fresh env install per run (matches reference).
+3. **`src/` tree.**
+   - cheapest: cache `src/` across runs (skip vcs import).
+   - faithful: fresh `vcs import` per run from the pinned manifest.
+4. **Test selection.**
+   - cheapest: `--packages-select <failing-test-pkg>`, no retries, parallel executor.
+   - faithful: the reference build's `--retest-until-pass`, `--executor`, `--ctest-args`, `--pytest-args` exactly.
+5. **RMW matrix.**
+   - cheapest: only the RMW(s) the failing tests run under.
+   - faithful: the full set the reference build runs (every RMW *not* in `--ignore-rmw`).
 
-- **Mirror every colcon invocation verbatim.** Grep the log for `==>` markers to find every colcon invocation. Mirror each one's flags exactly. Do not hand-edit.
+The knobs are settable per dispatch via matrix entries / workflow inputs, with the cheapest setting as default.
 
-- **`ROS_DOMAIN_ID`.** Grep the log for `ROS_DOMAIN_ID=` to see what the docker/CI env sets (a non-zero value avoids cross-job interference on shared CI). Add the same value to the workflow env block. Even if no test you care about asserts on it, mirror anyway — discovery-test fixtures can pick it up implicitly.
+## What to mirror (and when each mirror applies)
 
-- **`--ignore-rmw` flags.** Grep the log for `--ignore-rmw` to see which RMWs the build excludes. Your matrix must not include any RMW in the ignore list, or your build is testing something ros2.org isn't and has no reference to compare to.
+The build pins every pin value the upstream build pinned. Extract pin values from the build's log; do not invent or "tidy up". The pin set is platform-specific (see platform sections below). Pins (`PIXI_VERSION`, `PIXI_TOML_SHA`, `CI_REPOS_URL`, etc.) are mirrored at every layer — they cost nothing and change the env/source graph.
 
-- **pip-install steps (any colcon plugin or other dep).** Look for `pip install` invocations in the build setup phase — these are easy to miss because they happen before the colcon command line, not in it. Replicate each as a separate workflow step.
+The checks below catch a single bug class: **a silent divergence that explodes tens of minutes into the build**. Each one is most valuable when you're raising the corresponding layer toward faithful — at low layers, a deliberate divergence is the whole point.
 
-- **Package set comparison.** `grep -c '^Finished <<<' <log>` gives the count of packages built. After your workflow runs, compare that count. A mismatch means your `ros2.repos` resolution gave a different graph (missing repo, extra repo, divergent commit). Manual check at log review time; not worth automating.
+- **Mirror every colcon invocation verbatim.** Grep the log for `==>` markers to find every colcon invocation. Apply when raising **build scope** or **test selection** layers — those layers' faithful settings come from these invocations verbatim.
+
+- **`ROS_DOMAIN_ID`.** Grep the log for `ROS_DOMAIN_ID=` to see what the docker/CI env sets (a non-zero value avoids cross-job interference on shared CI). Add the same value to the workflow env block. Mirror at every layer — even if no test you care about asserts on it, discovery-test fixtures can pick it up implicitly.
+
+- **`--ignore-rmw` flags.** Grep the log for `--ignore-rmw` to see which RMWs the build excludes. Applies when raising the **RMW matrix** layer toward faithful: your matrix must not include any RMW in the ignore list, or your build is testing something the reference isn't and you have no comparison.
+
+- **pip-install steps (any colcon plugin or other dep).** Look for `pip install` invocations in the build setup phase — these are easy to miss because they happen before the colcon command line, not in it. Replicate each as a separate workflow step. Applies once the **env source** layer is raised toward faithful.
+
+- **Package set comparison.** `grep -c '^Finished <<<' <log>` gives the count of packages built. After your workflow runs, compare that count. A mismatch means your `ros2.repos` resolution gave a different graph (missing repo, extra repo, divergent commit). Applies when raising the **build scope** layer to the faithful setting. Manual check at log review time; not worth automating.
 
 ## Layout pattern (reusable across repos)
 
 A useful structure for the replication workflow:
 
-- A workflow file under `.github/workflows/` with a `workflow_dispatch` matrix input.
-- A small Python wrapper checked into `.github/` that reads a gitignored local JSON config (e.g. RMW list) and invokes `gh workflow run` with a JSON-encoded matrix.
+- A workflow file under `.github/workflows/` with a `workflow_dispatch` matrix input. The matrix carries the layer knobs (build-scope, env-cache, src-cache, test-scope, rmw) as independent dimensions.
+- A small Python wrapper checked into `.github/` that reads a gitignored local JSON config (e.g. RMW list, layer settings) and invokes `gh workflow run` with a JSON-encoded matrix.
 - The local config goes in `.git/info/exclude` (not `.gitignore`) so per-developer settings don't pollute the repo.
 
 This pattern (matrix input from local config + Python wrapper) is reusable for any "run workflow with my chosen matrix" use case.
@@ -59,14 +81,18 @@ This pattern (matrix input from local config + Python wrapper) is reusable for a
 
 - **Configure-only preflight** (`colcon build --cmake-force-configure` or similar). Doesn't work cleanly because each package's configure needs upstream packages' install trees; `find_package` failures during preflight aren't real errors.
 - **Drift-detection assertion step** (compare our cmake-args to expected). Premature abstraction with one consumer; user pushed back hard.
+- **Caching the env / build / src trees as the default.** A cache hit at any of those layers means we no longer test the question "did something change upstream between the reference build and now." Caching is fine *as the cheapest setting of an explicit layer knob*; it must not be the silent default.
+- **Auto-cancelling in-flight runs on a new dispatch.** Cancellation must be a deliberate manual action by the user, never workflow-driven. Don't propose `cancel-in-progress: true` without checking.
 
 ## Process notes for working this with the user
 
 - **One check at a time.** Don't batch. Explain what you'll do and why *before* running each check. The user will say `go` or `yes` to proceed.
 - **Address each gap before the next check.** Don't pile up findings — fix as you find.
 - **Never offer to push or force-push proactively.** The user will initiate if they want it.
+- **Never cancel a running job, even by mistake.** Don't trigger a new workflow run with the same concurrency group as an in-flight run. Cancellation is the user's call, not yours.
 - **No mkdir / file creation without permission.** Even for an "obvious" parent directory.
-- **The `colcon build` failure mode you're racing against:** tens of minutes of work that explodes on the first non-matching arg. Each check is cheap; the alternative is another full-build round-trip.
+- **Don't invent the user's goal from old workflow comments or earlier skill text.** The objective at the top of this file is the authoritative goal; if a workflow header says otherwise, the workflow is stale, not the goal.
+- **The `colcon build` failure mode you're racing against (at the faithful layer):** tens of minutes of work that explodes on the first non-matching arg. Each mirror check is cheap; the alternative is another full-build round-trip.
 
 ---
 
