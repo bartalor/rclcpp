@@ -50,6 +50,8 @@ jobs:
         with:
           pixi-version: ${{ env.PIXI_VERSION }}
           run-install: false
+          cache: true
+          cache-key: pixi-${{ env.PIXI_VERSION }}-${{ env.PIXI_TOML_SHA }}
 
       - name: Fetch pinned pixi.toml from ros2/ros2
         shell: pwsh
@@ -99,6 +101,15 @@ jobs:
       - name: Show all imported package commits
         shell: pwsh
         run: pixi run vcs log -l1 src
+
+      - name: Restore build/install cache (keyed on pinned manifest)
+        id: build-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            build
+            install
+          key: build-${{ matrix.rmw }}-${{ hashFiles('ros2.repos') }}
 
       - name: Resolve vcvarsall.bat path (mirrors ci.ros2.org x86_amd64 cross-toolchain)
         shell: pwsh
