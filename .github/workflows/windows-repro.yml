@@ -1,143 +1,119 @@
 name: windows-repro
 
-# Replicates ci.ros2.org Windows build #27999 environment using pixi.
-# pixi.toml is pinned to the commit of ros2/ros2@rolling that was HEAD when
-# build #27999 started (2026-05-14T22:49:27Z).
+# Rebuilds the ci.ros2.org Windows build #27999 docker image and runs the
+# failing tests inside it on a GitHub Actions windows-2022 runner.
+#
+# Deviations from #27999's Dockerfile (documented, intentional):
+#   - Base image: mcr.microsoft.com/windows/server:ltsc2022 (was :2009).
+#     Windows containers require host/image kernel match under
+#     --isolation=process; GHA windows-2022 runners are ltsc2022 and the
+#     only isolation available is process. :2009 image will not start.
+#   - Skip VS BuildTools 2019 install (#27999 Steps 8-9). #27999 builds with
+#     --visual-studio-version 2022; 2019 is dead weight here.
+#   - Skip RTI Connext install (#27999 Steps 25-30). The 9 failing tests
+#     all run under rmw_fastrtps_cpp; Connext is not exercised.
 
 on:
-  workflow_dispatch:
-    inputs:
-      matrix:
-        description: "JSON matrix (built by .github/windows-repro-run.py)"
-        required: true
+  workflow_dispatch: {}
 
 concurrency:
-  group: windows-repro-${{ github.event.inputs.matrix }}
+  group: windows-repro
   cancel-in-progress: false
 
 env:
   CI_REPOS_URL: https://gist.githubusercontent.com/fujitatomoya/e96e535bdc812744725b6237e9eb22e6/raw/ab84ebe82133d581d33d732a722c20660dfc487c/ros2.repos
   PIXI_VERSION: v0.41.0
+  PIXI_ZIP_SHA256: 16b1b83f2d6f04a990ef7c6eea2bb45d2e846d122be312ca3f5f1b14be7cdc6d
   PIXI_TOML_SHA: a22d7b50717dad7c8b3b2bfb36055684600925a5
+  IMAGE_TAG: ros2_windows_ci_rolling_repro
 
 jobs:
-  windows-rolling-source-build:
+  build-and-test:
     runs-on: windows-2022
     timeout-minutes: 350
 
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(inputs.matrix) }}
-
-    env:
-      RMW_IMPLEMENTATION: ${{ matrix.rmw }}
-      ROS_DOMAIN_ID: 1
-
     steps:
-      - name: Configure git long paths
-        shell: pwsh
-        run: git config --global core.longpaths true
-
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Check manifest URL reachable
-        shell: pwsh
-        run: Invoke-WebRequest -Method Head -Uri $env:CI_REPOS_URL -UseBasicParsing | Out-Null
-
-      - name: Install pixi
-        uses: prefix-dev/setup-pixi@v0.8.1
-        with:
-          pixi-version: ${{ env.PIXI_VERSION }}
-          run-install: false
-          cache: true
-          cache-key: pixi-${{ env.PIXI_VERSION }}-${{ env.PIXI_TOML_SHA }}
-
-      - name: Fetch pinned pixi.toml from ros2/ros2
+      - name: Write Dockerfile (mirrors ci.ros2.org #27999, see header for deviations)
         shell: pwsh
         run: |
-          $url = "https://raw.githubusercontent.com/ros2/ros2/$env:PIXI_TOML_SHA/pixi.toml"
-          Invoke-WebRequest -Uri $url -OutFile pixi.toml
-          Get-Content pixi.toml | Select-Object -First 8
+          @"
+          # escape=``
+          ARG ROS_DISTRO=rolling
+          FROM mcr.microsoft.com/windows/server:ltsc2022
 
-      - name: pixi install (frozen)
-        shell: pwsh
-        run: pixi install
+          ARG ROS_DISTRO
+          ARG PIXI_TOML_URL=https://raw.githubusercontent.com/ros2/ros2/${env:PIXI_TOML_SHA}/pixi.toml
 
-      - name: Bump colcon-ros-domain-id-coordinator (mirrors ci.ros2.org Dockerfile step 23)
-        shell: pwsh
-        run: pixi run pip install "colcon-ros-domain-id-coordinator >= 0.2.3"
+          RUN powershell -noexit "New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name 'LongPathsEnabled' -Value 1 -PropertyType DWORD -Force"
 
-      - name: pixi list (record exact resolved versions)
-        shell: pwsh
-        run: pixi list
+          RUN powershell -noexit irm https://aka.ms/vs/17/release/vs_buildtools.exe -OutFile vs_buildtools_2022.exe
+          RUN vs_buildtools_2022.exe --quiet --wait --norestart ``
+              --add Microsoft.Component.MSBuild ``
+              --add Microsoft.Net.Component.4.6.1.TargetingPack ``
+              --add Microsoft.Net.Component.4.8.SDK ``
+              --add Microsoft.VisualStudio.Component.CoreBuildTools ``
+              --add Microsoft.VisualStudio.Component.Roslyn.Compiler ``
+              --add Microsoft.VisualStudio.Component.TextTemplating ``
+              --add Microsoft.VisualStudio.Component.VC.CLI.Support ``
+              --add Microsoft.VisualStudio.Component.VC.CoreBuildTools ``
+              --add Microsoft.VisualStudio.Component.VC.CoreIde ``
+              --add Microsoft.VisualStudio.Component.VC.Redist.14.Latest ``
+              --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 ``
+              --add Microsoft.VisualStudio.Component.Windows10SDK ``
+              --add Microsoft.VisualStudio.Component.Windows10SDK.19041 ``
+              --add Microsoft.VisualStudio.ComponentGroup.NativeDesktop.Core ``
+              --add Microsoft.VisualStudio.Workload.MSBuildTools ``
+              --add Microsoft.VisualStudio.Workload.VCTools
 
-      - name: Fetch pinned ros2.repos manifest
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path src | Out-Null
-          Invoke-WebRequest -Uri $env:CI_REPOS_URL -OutFile ros2.repos
-          Get-Content ros2.repos | Select-Object -First 5
+          RUN powershell -noexit irm https://github.com/prefix-dev/pixi/releases/download/${env:PIXI_VERSION}/pixi-x86_64-pc-windows-msvc.zip -OutFile pixi-x86_64-pc-windows-msvc.zip
+          RUN powershell -noexit "if ((get-filehash pixi-x86_64-pc-windows-msvc.zip -Algorithm SHA256).hash -ne '${env:PIXI_ZIP_SHA256}') { exit 1 }"
+          RUN powershell -noexit Expand-Archive -Path pixi-x86_64-pc-windows-msvc.zip -DestinationPath (Join-Path `$Env:USERPROFILE\.pixi 'bin') -Force
+          RUN powershell -noexit "`$bindir = Join-Path `$Env:USERPROFILE\.pixi 'bin' ; `$pathkey = (Get-Item -Path 'HKCU:').OpenSubKey('Environment', `$true) ; `$oldpath = `$pathkey.GetValue('PATH', `$null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames) ; `$pathkey.SetValue('PATH', `"`$bindir;`$oldpath`", [Microsoft.Win32.RegistryValueKind]::String)"
 
-      - name: Verify manifest has required entries
-        shell: pwsh
-        run: |
-          $manifest = Get-Content ros2.repos -Raw
-          foreach ($entry in @("bartalor/rclcpp", "ros2/system_tests")) {
-            if ($manifest -notmatch [regex]::Escape($entry)) { throw "Manifest missing entry: $entry" }
-          }
+          WORKDIR C:\pixi_ws
+          ADD `${PIXI_TOML_URL} pixi.toml
+          RUN powershell -Command "(Get-Item pixi.toml).LastWriteTime = Get-Date"
+          RUN pixi --color never --no-progress -q install
+          RUN pixi --color never --no-progress -q list
+          RUN pixi --color never --no-progress -q run "pip install 'colcon-ros-domain-id-coordinator >= 0.2.3'"
 
-      - name: Set up colcon mixins (mirrors ci.ros2.org)
-        shell: pwsh
-        run: |
-          pixi run colcon mixin remove default 2>$null
-          pixi run colcon mixin add default https://raw.githubusercontent.com/colcon/colcon-mixin-repository/master/index.yaml
-          pixi run colcon mixin update default
+          ENV ROS_DISTRO=`${ROS_DISTRO}
+          WORKDIR C:\ci
+          "@ | Out-File -Encoding ascii -FilePath Dockerfile
+          Get-Content Dockerfile
 
-      - name: vcs import sources
-        shell: pwsh
-        run: pixi run vcs import --force --retry 5 src --input ros2.repos
-
-      - name: Show all imported package commits
-        shell: pwsh
-        run: pixi run vcs log -l1 src
-
-      - name: Restore build/install cache (keyed on pinned manifest)
-        id: build-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            build
-            install
-          key: build-${{ matrix.rmw }}-${{ hashFiles('ros2.repos') }}
-
-      - name: Resolve vcvarsall.bat path (mirrors ci.ros2.org x86_amd64 cross-toolchain)
-        shell: pwsh
-        run: |
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $vsPath = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-          $vcvars = Join-Path $vsPath "VC\Auxiliary\Build\vcvarsall.bat"
-          "VCVARS=$vcvars" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: colcon build (mirrors ci.ros2.org build #27999 invocation)
+      - name: docker build image
         shell: cmd
-        run: call "%VCVARS%" x86_amd64 && pixi run colcon build --base-paths src --merge-install --event-handlers console_cohesion+ console_package_list+ --packages-above-and-dependencies rclcpp --cmake-args -DBUILD_TESTING=ON --no-warn-unused-cli -DINSTALL_EXAMPLES=OFF -DSECURITY=ON -DAPPEND_PROJECT_NAME_TO_INCLUDEDIR=ON
+        run: docker build --isolation=process -t %IMAGE_TAG% .
 
-      - name: colcon test (focused on rclcpp + test_rosidl_buffer)
-        shell: cmd
-        run: call "%VCVARS%" x86_amd64 && call install\local_setup.bat && pixi run colcon test --base-paths src --merge-install --event-handlers console_cohesion+ --packages-select rclcpp test_rosidl_buffer --retest-until-pass 2 --ctest-args -LE xfail --pytest-args -m "not xfail" --executor sequential
+      - name: Clone ros2/ci into workspace (provides run_ros2_batch.py)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path workspace | Out-Null
+          git clone --depth 1 https://github.com/ros2/ci.git workspace_tmp
+          # ros2_batch expects run_ros2_batch.py and ros2_batch_job/ at C:\ci root
+          Copy-Item -Recurse -Force workspace_tmp\* workspace\
+          Remove-Item -Recurse -Force workspace_tmp
 
-      - name: colcon test-result
-        if: always()
+      - name: docker run (mirrors ci.ros2.org #27999 invocation, scoped to failing tests)
         shell: cmd
-        run: pixi run colcon test-result --all --verbose
+        run: |
+          docker run --isolation=process --rm ^
+            -e ROS_DOMAIN_ID=1 ^
+            -e CI_ARGS="--force-ansi-color --workspace-path C:\ci --ignore-rmw rmw_fastrtps_dynamic_cpp --ignore-rmw rmw_connextdds --ignore-rmw rmw_cyclonedds_cpp --repo-file-url https://gist.githubusercontent.com/fujitatomoya/e96e535bdc812744725b6237e9eb22e6/raw/ab84ebe82133d581d33d732a722c20660dfc487c/ros2.repos --colcon-mixin-url https://raw.githubusercontent.com/colcon/colcon-mixin-repository/master/index.yaml --visual-studio-version 2022 --build-args --event-handlers console_cohesion+ console_package_list+ --cmake-args -DINSTALL_EXAMPLES=OFF -DSECURITY=ON -DAPPEND_PROJECT_NAME_TO_INCLUDEDIR=ON --packages-up-to test_rosidl_buffer --test-args --event-handlers console_cohesion+ --retest-until-pass 2 --ctest-args -LE xfail --pytest-args -m \"not xfail\" --executor sequential --packages-select test_rosidl_buffer" ^
+            -v "%CD%\workspace":"C:\ci" ^
+            %IMAGE_TAG% ^
+            cmd /c "pixi run --manifest-path C:\pixi_ws\pixi.toml --frozen python run_ros2_batch.py %CI_ARGS%"
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.rmw }}
+          name: test-results
           path: |
-            build/**/test_results/**/*.xml
-            log/**/*
+            workspace/**/test_results/**/*.xml
+            workspace/**/log/**/*
           retention-days: 7
