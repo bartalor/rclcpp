@@ -10,9 +10,17 @@ This file holds rules and pointers that survive across sessions. It complements 
 
 ### `.github/workflows/windows-repro.yml`
 
-The live workflow. **Rebuilds ci.ros2.org Windows build #27999's docker image and runs the reference's own `docker run` invocation on a GHA `windows-2022` host.** Three intentional deviations from #27999's Dockerfile (base image kernel bump, drop VS 2019, drop Connext) — each one explained in the file's header comment and in `windows-repro.md`.
+The live workflow. **Rebuilds ci.ros2.org Windows build #27999's docker image and runs the reference's own `docker run` invocation on a GHA `windows-2022` host.** Three intentional deviations from #27999's Dockerfile (base image kernel bump, drop VS 2019, drop Connext) — each one explained in `.github/windows-repro.Dockerfile`'s header comment and in `windows-repro.md`.
 
 If you change this file, **also update `windows-repro.md`** in the same commit. The two are a pair.
+
+### `.github/windows-repro.Dockerfile`
+
+The actual Dockerfile that `windows-repro.yml` builds. **Pins (`PIXI_VERSION`, `PIXI_ZIP_SHA256`, `PIXI_TOML_SHA`) are passed in via `--build-arg`** from the workflow's `env:` block — the workflow stays the single source of truth for pin values. Header comment documents the three deviations from #27999.
+
+Previously this content was emitted by a PowerShell heredoc inside the workflow's "Write Dockerfile" step. That approach died on Step 11 in run `26443931213` because the backtick Dockerfile-escape and PowerShell's own backtick-escape collided on the one RUN line that embeds quotes. The extraction also makes the file diffable against #27999's Dockerfile (recoverable from `/tmp/ci_windows_27999.log` Step lines) and locally buildable without GHA.
+
+If you change this file, **also update `windows-repro.md`** in the same commit (it's part of the pair with the workflow).
 
 ### `.github/workflows/windows-repro.md`
 
