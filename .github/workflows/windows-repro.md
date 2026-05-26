@@ -6,7 +6,7 @@ This document explains every meaningful line in `.github/workflows/windows-repro
 2. **Why it's there** — what choice in ci.ros2.org Windows Jenkins build #27999 (the reference) it mirrors, or what upstream tool constraint forces it.
 3. **The evidence** — log line citations from `/tmp/ci_windows_27999.log` (cited as `log:NNNN`), or the upstream URL / docs page.
 
-Citations like `windows-repro.yml:NN` refer to the workflow file. Citations like `log:NNNN` refer to `/tmp/ci_windows_27999.log` (use `sed -n 'NNNNp' /tmp/ci_windows_27999.log` to look them up).
+Citations like `windows-repro.yml › "anchor"` or `windows-repro.yml › <step name>` point to a search anchor in the workflow file — open the file and Ctrl-F. (We avoid line numbers because they drift on every edit and the surface area to maintain is too large.) Citations like `log:NNNN` refer to `/tmp/ci_windows_27999.log` (use `sed -n 'NNNNp' /tmp/ci_windows_27999.log` to look them up).
 
 Items I could not justify are flagged inline with **⚠ UNJUSTIFIED** and gathered at the end.
 
@@ -23,7 +23,7 @@ Items I could not justify are flagged inline with **⚠ UNJUSTIFIED** and gather
 
 ---
 
-## Intentional deviations from #27999 (header comment, `windows-repro.yml:3-14`)
+## Intentional deviations from #27999 (header comment of `windows-repro.yml`)
 
 Three deviations are documented at the top of the workflow file. Each has a reason that has been verified against the cached log:
 
@@ -43,11 +43,11 @@ So `:2009` would fail to start on a `windows-2022` host. We bump to `:ltsc2022` 
 
 ---
 
-## `name: windows-repro` (`windows-repro.yml:1`)
+## `name: windows-repro`
 
 Cosmetic workflow display name. No upstream pin. Just a label so the run shows up usefully in the GitHub Actions UI.
 
-## `on:` trigger (`windows-repro.yml:16-17`)
+## `on:` trigger
 
 ```
 on:
@@ -56,7 +56,7 @@ on:
 
 Manual-only trigger. No inputs (this revision intentionally simpler than the pre-v1.01 matrix-input version — we no longer matrix across RMWs because all 9 failing tests are FastRTPS-only). Matches SKILL.md "Layout pattern" recommendation for `workflow_dispatch` plus the "RMW matrix: cheapest" knob narrowed to a single RMW.
 
-## `concurrency:` block (`windows-repro.yml:19-21`)
+## `concurrency:` block
 
 ```
 concurrency:
@@ -69,42 +69,33 @@ concurrency:
 
 Commit `ac1c4305` (`ci(windows-repro): never auto-cancel in-flight runs`) carries this rule forward from the pre-v1.01 workflow.
 
-## `env:` (workflow-level) (`windows-repro.yml:23-28`)
+## `env:` (workflow-level)
 
 ```
 env:
-  CI_REPOS_URL: https://gist.githubusercontent.com/fujitatomoya/e96e535bdc812744725b6237e9eb22e6/raw/ab84ebe82133d581d33d732a722c20660dfc487c/ros2.repos
   PIXI_VERSION: v0.41.0
   PIXI_ZIP_SHA256: 16b1b83f2d6f04a990ef7c6eea2bb45d2e846d122be312ca3f5f1b14be7cdc6d
   PIXI_TOML_SHA: a22d7b50717dad7c8b3b2bfb36055684600925a5
   IMAGE_TAG: ros2_windows_ci_rolling_repro
 ```
 
-### `CI_REPOS_URL` (`windows-repro.yml:24`)
+The `--repo-file-url` value lives inline in the `docker run`'s `-e CI_ARGS="..."` string (search the workflow for `-e CI_ARGS=`), not in this `env:` block — it's consumed once, by `run_ros2_batch.py` inside the container, with no other reference. Mirrors `log:290` / `log:308`. The gist pins `bartalor/rclcpp@bar/issue-2898` (`log:693-696`), which is the fork providing the rclcpp under test.
 
-The exact `--repo-file-url` from the reference build's CI_ARGS:
-- `log:290`: `... --repo-file-url https://gist.githubusercontent.com/fujitatomoya/e96e535bdc812744725b6237e9eb22e6/raw/ab84ebe82133d581d33d732a722c20660dfc487c/ros2.repos ...`
-- Same URL in the `docker run -e CI_ARGS=...` invocation (`log:308`) and in `run_ros2_batch.py`'s parsed args (`log:312`).
-
-Per SKILL.md "Windows pins to extract from the log" → "`CI_REPOS_URL`: the build's `--repo-file-url` arg, search for it in the ros2_batch CI_ARGS line." Matches.
-
-The gist pins `bartalor/rclcpp@bar/issue-2898` (`log:693-696`), which is the fork providing the rclcpp under test.
-
-### `PIXI_VERSION: v0.41.0` (`windows-repro.yml:25`)
+### `PIXI_VERSION: v0.41.0`
 
 Pin from the Dockerfile `Step 12/32`:
 - `log:170`: `Step 12/32 : RUN powershell -noexit irm https://github.com/prefix-dev/pixi/releases/download/v0.41.0/pixi-x86_64-pc-windows-msvc.zip -OutFile pixi-x86_64-pc-windows-msvc.zip`
 
 Per SKILL.md "Windows pins to extract from the log" → "`PIXI_VERSION`: the Dockerfile `Step N/M : RUN ... pixi-...zip` line — the URL has the version." Matches.
 
-### `PIXI_ZIP_SHA256` (`windows-repro.yml:26`)
+### `PIXI_ZIP_SHA256`
 
 The SHA-256 integrity check that #27999's Dockerfile pins in Step 13:
 - `log:173`: `Step 13/32 : RUN powershell -noexit "if ((get-filehash pixi-x86_64-pc-windows-msvc.zip -Algorithm SHA256).hash -ne '16b1b83f2d6f04a990ef7c6eea2bb45d2e846d122be312ca3f5f1b14be7cdc6d') { exit 1 }"`
 
 Verbatim mirror — the value is interpolated into the Dockerfile we generate so the integrity check runs identically inside our image build.
 
-### `PIXI_TOML_SHA: a22d7b50717dad7c8b3b2bfb36055684600925a5` (`windows-repro.yml:27`)
+### `PIXI_TOML_SHA: a22d7b50717dad7c8b3b2bfb36055684600925a5`
 
 The `ros2/ros2@rolling` HEAD commit at build-start time. Not in the cached log directly — the reference Dockerfile uses `refs/heads/rolling`, not a SHA (`log:152`):
 - `log:152`: `Step 6/32 : ARG PIXI_TOML_URL=https://raw.githubusercontent.com/ros2/ros2/refs/heads/${ROS_DISTRO}/pixi.toml`
@@ -112,21 +103,21 @@ The `ros2/ros2@rolling` HEAD commit at build-start time. Not in the cached log d
 
 Per SKILL.md "Windows pins to extract from the log" → "`PIXI_TOML_SHA`: ros2/ros2 HEAD SHA at build start time — find a commit on the `<distro>` branch with a timestamp at-or-just-before the build's start." We pin a SHA where the reference used a moving ref so our image is reproducible after `ros2/ros2@rolling` advances. **⚠ The SHA's link to the build-start timestamp is by external reconstruction** — not independently verifiable from the cached log alone.
 
-### `IMAGE_TAG: ros2_windows_ci_rolling_repro` (`windows-repro.yml:28`)
+### `IMAGE_TAG: ros2_windows_ci_rolling_repro`
 
 Local docker image tag. Mirrors #27999's tag pattern `ros2_windows_ci_rolling` (`log:308`) with `_repro` suffix so we don't accidentally collide if you ever build #27999's actual image locally.
 
 ---
 
-## `jobs.build-and-test:` (`windows-repro.yml:30-31`)
+## `jobs.build-and-test:`
 
 Single job, no matrix. Pre-v1.01 had a per-RMW matrix; this revision drops it because all 9 failing tests are FastRTPS only, so the RMW knob's cheapest setting is exactly one RMW.
 
-### `runs-on: windows-2022` (`windows-repro.yml:32`)
+### `runs-on: windows-2022`
 
 A GitHub-hosted runner image whose host OS is Windows Server 2022 (ltsc2022). This is the kernel-match constraint driving Deviation 1 above. `windows-latest` currently aliases to `windows-2022` but could shift; we pin the explicit name.
 
-### `timeout-minutes: 350` (`windows-repro.yml:33`)
+### `timeout-minutes: 350`
 
 5h 50min ceiling. **⚠ Source not in the log directly.** GitHub Actions caps a single job at 360 min on hosted runners; 350 is just-under-cap. The reference Jenkins build doesn't advertise its timeout in the log. Heuristic, not a mirror. **⚠ UNJUSTIFIED** as a specific number.
 
@@ -134,7 +125,7 @@ A GitHub-hosted runner image whose host OS is Windows Server 2022 (ltsc2022). Th
 
 ## Steps
 
-### Step: Checkout repo (`windows-repro.yml:36-37`)
+### Step: Checkout repo
 
 ```
 - name: Checkout repo
@@ -161,7 +152,7 @@ Going line by line through `.github/windows-repro.Dockerfile`:
 - `ARG ROS_DISTRO=rolling` (before `FROM`) — mirrors `log:146` `Step 3/32 : ARG ROS_DISTRO=rolling`.
 - `FROM mcr.microsoft.com/windows/server:ltsc2022` — **Deviation 1**. Reference at `log:147` is `mcr.microsoft.com/windows/server:$WINDOWS_RELEASE_VERSION` resolved to `:2009`.
 - `ARG ROS_DISTRO` (after `FROM`) — re-declares so the value crosses the `FROM` boundary into this stage. Mirrors `log:149` `Step 5/32 : ARG ROS_DISTRO`.
-- `ARG PIXI_VERSION`, `ARG PIXI_ZIP_SHA256`, `ARG PIXI_TOML_SHA` — no defaults; missing `--build-arg` is a hard error. The workflow's `env:` block supplies all three (`windows-repro.yml:43-45`).
+- `ARG PIXI_VERSION`, `ARG PIXI_ZIP_SHA256`, `ARG PIXI_TOML_SHA` — no defaults; missing `--build-arg` is a hard error. The workflow's `env:` block supplies all three (search the workflow for `--build-arg`).
 - `ARG PIXI_TOML_URL=https://raw.githubusercontent.com/ros2/ros2/${PIXI_TOML_SHA}/pixi.toml` — **deliberate divergence from `log:152`**: reference uses `refs/heads/${ROS_DISTRO}`, we substitute the frozen `PIXI_TOML_SHA` so the env is reproducible after `ros2/ros2@rolling` advances.
 - `RUN powershell ... LongPathsEnabled` — mirrors `log:155` `Step 7/32` verbatim. Sets the Windows registry key so long source paths work during the build (ROS 2 trees blow past the default 260-char Win32 `MAX_PATH`).
 - `RUN powershell -noexit irm .../vs_buildtools.exe ...` — mirrors `log:164` (`Step 10/32`). **Deviation 2**: we skip `log:158-161` (`Steps 8-9`, VS 2019 BuildTools download + install).
@@ -184,7 +175,7 @@ Going line by line through `.github/windows-repro.Dockerfile`:
 - `WORKDIR C:\ci` — mirrors `log:228` (`Step 31/32`). The CWD inside the container at run time; the mount point for the host workspace.
 - **Skipped:** `log:231` (`Step 32/32`, the `CMD` that runs `pixi run ... python run_ros2_batch.py %CI_ARGS%`). We invoke this manually via `docker run` instead so we control the args from outside.
 
-### Step: docker build image (`windows-repro.yml:39-47`)
+### Step: docker build image
 
 ```
 - name: docker build image
@@ -205,7 +196,7 @@ Going line by line through `.github/windows-repro.Dockerfile`:
 - `-t %IMAGE_TAG%` — tag the built image so the subsequent `docker run` references it by name.
 - `.` — build context = repo root (`checkout@v4` puts us there). The Dockerfile only `ADD`s a remote URL, so build context contents aren't actually used; we still need a context arg.
 
-### Step: Clone ros2/ci into workspace (`windows-repro.yml:49-56`)
+### Step: Clone ros2/ci into workspace
 
 ```
 - name: Clone ros2/ci into workspace (provides run_ros2_batch.py)
@@ -233,7 +224,7 @@ The fix: clone `https://github.com/ros2/ci` (which has `run_ros2_batch.py` at it
 
 Per SKILL.md "Windows-specific" → "**It IS in a public repo: `https://github.com/ros2/ci`**. To invoke it directly, clone `ros2/ci` into the host-side workspace dir before `docker run` so the mount surfaces the script at `C:\ci\run_ros2_batch.py`."
 
-### Step: docker run (`windows-repro.yml:58-66`)
+### Step: docker run
 
 ```
 - name: docker run (mirrors ci.ros2.org #27999 invocation, scoped to failing tests)
@@ -265,7 +256,7 @@ Going through every piece:
 - `%IMAGE_TAG%` — our locally-built image (vs reference's `ros2_windows_ci_rolling`).
 - `cmd /c "pixi run --manifest-path C:\pixi_ws\pixi.toml --frozen python run_ros2_batch.py %CI_ARGS%"` — the entry command. Verbatim mirror of `log:231` (`Step 32/32` CMD). Since we **skipped** the Dockerfile CMD (Step 32/32) when writing our Dockerfile, we re-supply it here on the docker run command line so the container has something to execute.
 
-### Step: Upload test results (`windows-repro.yml:68-76`)
+### Step: Upload test results
 
 ```
 - name: Upload test results
@@ -292,11 +283,11 @@ Going through every piece:
 
 Items marked **⚠ UNJUSTIFIED** above, gathered:
 
-1. **`PIXI_TOML_SHA: a22d7b50717dad7c8b3b2bfb36055684600925a5`** (`windows-repro.yml:27`). The Dockerfile in the cached log uses `refs/heads/rolling` (`log:152`), so the link from this SHA to "ros2/ros2@rolling HEAD at 2026-05-14T22:49:27Z" must be reconstructed externally. Not verifiable from the cached log alone.
+1. **`PIXI_TOML_SHA: a22d7b50717dad7c8b3b2bfb36055684600925a5`** (workflow `env:` block). The Dockerfile in the cached log uses `refs/heads/rolling` (`log:152`), so the link from this SHA to "ros2/ros2@rolling HEAD at 2026-05-14T22:49:27Z" must be reconstructed externally. Not verifiable from the cached log alone.
 
-2. **`timeout-minutes: 350`** (`windows-repro.yml:33`). No Jenkins-side timeout in the cached log. Sits just under GitHub Actions' 360-min hard cap on hosted runners. Heuristic, no upstream pin.
+2. **`timeout-minutes: 350`** (`jobs.build-and-test`). No Jenkins-side timeout in the cached log. Sits just under GitHub Actions' 360-min hard cap on hosted runners. Heuristic, no upstream pin.
 
-3. **`retention-days: 7`** on artifact upload (`windows-repro.yml:76`). No reference. Local convention.
+3. **`retention-days: 7`** on artifact upload (Upload test results step). No reference. Local convention.
 
 ## Known divergences from the reference (not mistakes — design choices)
 
