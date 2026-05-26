@@ -107,7 +107,7 @@ ci.ros2.org's Windows builds run inside a docker image built per build. The gene
 3. Installs RTI Connext DDS (proprietary, copied from a private path).
 4. CMD invokes ros2_batch via `pixi run --frozen python run_ros2_batch.py %CI_ARGS%`.
 
-`run_ros2_batch.py` lives in the **Jenkins workspace**, mounted at `C:\ci` via `-v "C:\J\workspace\ci_windows":"C:\ci"`. It is NOT in the docker image. It's NOT in any single public repo we could find — chasing it down was a dead end. Don't try to invoke `run_ros2_batch.py` directly.
+`run_ros2_batch.py` lives in the **Jenkins workspace**, mounted at `C:\ci` via `-v "C:\J\workspace\ci_windows":"C:\ci"`. It is NOT in the docker image. **It IS in a public repo: `https://github.com/ros2/ci`** (top-level `run_ros2_batch.py` + sibling `ros2_batch_job/` package). To invoke it directly, clone `ros2/ci` into the host-side workspace dir before `docker run` so the mount surfaces the script at `C:\ci\run_ros2_batch.py`.
 
 ## Windows pins to extract from the log
 
@@ -131,5 +131,5 @@ The mirror runs on a `windows-2022` GitHub Actions runner. Pins to extract:
 
 ## What we considered and rejected (Windows-specific)
 
-- **Run ros2_batch directly.** Would eliminate all hand-typed args. Rejected because (a) `run_ros2_batch.py` is in a non-obvious Jenkins location, (b) RTI Connext is proprietary, (c) ros2_batch assumes mount paths `C:\ci` / `C:\pixi_ws` that we can't easily fake.
+- **Run ros2_batch directly on bare GHA runner.** Rejected for the bare-runner path because ros2_batch assumes container-style mount paths (`C:\ci`, `C:\pixi_ws`). For the docker-container path (rebuild the ci.ros2.org image on GHA), running ros2_batch directly is the right approach — clone `ros2/ci` into the host workspace mounted at `C:\ci`.
 - **Pure Docker** (build the actual ci.ros2.org image and run it). Would be most faithful but needs Windows + Docker locally. Out of scope if the user wants GH Actions.
