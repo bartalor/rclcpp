@@ -75,14 +75,20 @@ jobs:
           Remove-Item -Recurse -Force workspace_tmp
 
       - name: docker run (mirrors ci.ros2.org #27999 invocation, scoped to failing tests)
-        shell: cmd
+        shell: pwsh
         run: |
-          docker run --isolation=process --rm ^
-            -e ROS_DOMAIN_ID=1 ^
-            -e CI_ARGS="--force-ansi-color --workspace-path C:\ci --ignore-rmw rmw_fastrtps_dynamic_cpp --ignore-rmw rmw_connextdds --ignore-rmw rmw_cyclonedds_cpp --repo-file-url https://gist.githubusercontent.com/fujitatomoya/e96e535bdc812744725b6237e9eb22e6/raw/ab84ebe82133d581d33d732a722c20660dfc487c/ros2.repos --colcon-mixin-url https://raw.githubusercontent.com/colcon/colcon-mixin-repository/master/index.yaml --visual-studio-version 2022 --build-args --event-handlers console_cohesion+ console_package_list+ --cmake-args -DINSTALL_EXAMPLES=OFF -DSECURITY=ON -DAPPEND_PROJECT_NAME_TO_INCLUDEDIR=ON --packages-up-to test_rosidl_buffer --test-args --event-handlers console_cohesion+ --retest-until-pass 2 --ctest-args -LE xfail --pytest-args -m \"not xfail\" --executor sequential --packages-select test_rosidl_buffer" ^
-            -v "%CD%\workspace":"C:\ci" ^
-            %IMAGE_TAG% ^
-            cmd /c "pixi run --manifest-path C:\pixi_ws\pixi.toml --frozen python run_ros2_batch.py %CI_ARGS%"
+          # PowerShell array splat: each element becomes one argv to docker.exe.
+          # Single-quoted strings are literal end-to-end -- no variable expansion,
+          # no backtick escape, no surprises around the embedded `"not xfail"`.
+          $dockerArgs = @(
+            'run', '--isolation=process', '--rm',
+            '-e', 'ROS_DOMAIN_ID=1',
+            '-v', "${PWD}\workspace:C:\ci",
+            $env:IMAGE_TAG,
+            'cmd', '/c',
+            'pixi run --manifest-path C:\pixi_ws\pixi.toml --frozen python run_ros2_batch.py --force-ansi-color --workspace-path C:\ci --ignore-rmw rmw_fastrtps_dynamic_cpp --ignore-rmw rmw_connextdds --ignore-rmw rmw_cyclonedds_cpp --repo-file-url https://gist.githubusercontent.com/fujitatomoya/e96e535bdc812744725b6237e9eb22e6/raw/ab84ebe82133d581d33d732a722c20660dfc487c/ros2.repos --colcon-mixin-url https://raw.githubusercontent.com/colcon/colcon-mixin-repository/master/index.yaml --visual-studio-version 2022 --build-args --event-handlers console_cohesion+ console_package_list+ --cmake-args -DINSTALL_EXAMPLES=OFF -DSECURITY=ON -DAPPEND_PROJECT_NAME_TO_INCLUDEDIR=ON --packages-up-to test_rosidl_buffer --test-args --event-handlers console_cohesion+ --retest-until-pass 2 --ctest-args -LE xfail --pytest-args -m "not xfail" --executor sequential --packages-select test_rosidl_buffer'
+          )
+          docker @dockerArgs
 
       - name: Upload test results
         if: always()

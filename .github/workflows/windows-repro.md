@@ -79,7 +79,7 @@ env:
   IMAGE_TAG: ros2_windows_ci_rolling_repro
 ```
 
-The `--repo-file-url` value lives inline in the `docker run`'s `-e CI_ARGS="..."` string (search the workflow for `-e CI_ARGS=`), not in this `env:` block — it's consumed once, by `run_ros2_batch.py` inside the container, with no other reference. Mirrors `log:290` / `log:308`. The gist pins `bartalor/rclcpp@bar/issue-2898` (`log:693-696`), which is the fork providing the rclcpp under test.
+The `--repo-file-url` value lives inline in the `docker run`'s `cmd /c "..."` payload (search the workflow for `--repo-file-url`), not in this `env:` block — it's consumed once, by `run_ros2_batch.py` inside the container, with no other reference. Mirrors `log:290` / `log:308`. The gist pins `bartalor/rclcpp@bar/issue-2898` (`log:693-696`), which is the fork providing the rclcpp under test.
 
 ### `PIXI_VERSION: v0.41.0`
 
@@ -245,15 +245,33 @@ Per SKILL.md "Windows-specific" → "**It IS in a public repo: `https://github.c
 
 ```
 - name: docker run (mirrors ci.ros2.org #27999 invocation, scoped to failing tests)
-  shell: cmd
+  shell: pwsh
   run: |
-    docker run --isolation=process --rm ^
-      -e ROS_DOMAIN_ID=1 ^
-      -e CI_ARGS="--force-ansi-color --workspace-path C:\ci --ignore-rmw rmw_fastrtps_dynamic_cpp --ignore-rmw rmw_connextdds --ignore-rmw rmw_cyclonedds_cpp --repo-file-url ... --packages-up-to test_rosidl_buffer --test-args ... --packages-select test_rosidl_buffer" ^
-      -v "%CD%\workspace":"C:\ci" ^
-      %IMAGE_TAG% ^
-      cmd /c "pixi run --manifest-path C:\pixi_ws\pixi.toml --frozen python run_ros2_batch.py %CI_ARGS%"
+    $dockerArgs = @(
+      'run', '--isolation=process', '--rm',
+      '-e', 'ROS_DOMAIN_ID=1',
+      '-v', "${PWD}\workspace:C:\ci",
+      $env:IMAGE_TAG,
+      'cmd', '/c',
+      'pixi run --manifest-path C:\pixi_ws\pixi.toml --frozen python run_ros2_batch.py --force-ansi-color --workspace-path C:\ci --ignore-rmw ... --pytest-args -m "not xfail" ... --packages-select test_rosidl_buffer'
+    )
+    docker @dockerArgs
 ```
+
+**Why `shell: pwsh` + array splat, not `shell: cmd` with the reference's verbatim shape.** ci.ros2.org #27999's invocation (`log:308`) runs under bash on Linux Jenkins, where `\"` is a real escape and `$CI_ARGS` and `\"not xfail\"` are unambiguous. A direct translation to `shell: cmd` with `%CI_ARGS%` and `\"not xfail\"` died three runs in a row to distinct shell-quoting problems:
+
+1. Run `26445844372` — Dockerfile `${PIXI_VERSION}` not substituted because Docker doesn't substitute `${VAR}` inside `RUN` (fixed in `dc03dc7a` via `ENV` promotion).
+2. Run `26512474496` — Docker daemon not started at runner boot ([actions/runner-images#13729](https://github.com/actions/runner-images/issues/13729); fixed in `ce229762` via the Wait for Docker step).
+3. Run `26512906550` — `%CI_ARGS%` substituted by host cmd against host's empty env, not the container's `-e CI_ARGS=...`; script invoked with no args (`run_ros2_batch.py: error: the following arguments are required: --repo-file-url, --visual-studio-version`).
+
+After fix #3, run-cold review revealed a fourth latent bug: cmd does not treat `\"` as an escape (it uses a quote-toggle model), so `\"not xfail\"` copied from the bash original is ill-defined under cmd and may split into two argv tokens.
+
+`shell: pwsh` collapses all four of these into one well-defined model:
+- **PowerShell array splat** (`docker @dockerArgs`) passes each array element as a separate argv to `docker.exe`. No tokenization, no quote-toggle. Per [Microsoft Learn › about_Splatting](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_splatting).
+- **Single-quoted strings** (`'...'`) are literal end-to-end. No `$var` expansion, no backtick escape. Per [Microsoft Learn › about_Quoting_Rules](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_quoting_rules). Lets `"not xfail"` sit verbatim in the payload string with no escaping.
+- **Double-quoted strings** are used only where we want expansion (`"${PWD}\workspace:C:\ci"`); `$env:IMAGE_TAG` is passed bare since PowerShell's array literal accepts a variable directly.
+
+The container's `cmd /c "<payload>"` still parses normally on its end — single set of quotes around the payload, stripped, remainder preserved per the [cmd docs](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/cmd) — and the inner `"not xfail"` reaches Python's argv as one quoted token.
 
 Reference invocation (verbatim):
 - `log:308`: `docker run --isolation=process --rm --net=isolated_network -e ROS_DOMAIN_ID=1 -e CI_ARGS="..." -v "C:\J\workspace\ci_windows":"C:\ci" ros2_windows_ci_rolling ...`
@@ -264,14 +282,14 @@ Going through every piece:
 - `--rm` — auto-cleanup the container on exit. Matches reference.
 - `-e ROS_DOMAIN_ID=1` — matches reference. Per SKILL.md "ROS_DOMAIN_ID. Mirror at every layer."
 - **`--net=isolated_network` not mirrored.** Reference uses a custom docker bridge (`log:308`); we run on GHA's default network. This is a **⚠ KNOWN DIVERGENCE** — FastRTPS discovery is multicast-based and the network topology can matter. Not addressed in this revision.
-- `-e CI_ARGS="..."` — the args string is mostly verbatim from `log:290`, with these targeted changes:
+- The inlined arg string (everything after `python run_ros2_batch.py` inside `cmd /c "..."`) is mostly verbatim from `log:290`, with these targeted changes:
   - `--workspace-path C:\J\workspace\ci_windows` → `--workspace-path C:\ci`. Reference uses the host-side path which gets mounted to `C:\ci`; we pass `C:\ci` directly since that's what `run_ros2_batch.py` actually sees inside the container.
   - Added `--ignore-rmw rmw_connextdds --ignore-rmw rmw_cyclonedds_cpp` (reference only ignores `rmw_fastrtps_dynamic_cpp`). We narrow to `rmw_fastrtps_cpp` only — the SKILL.md "RMW matrix" knob at its cheapest setting. The failing tests are all on `rmw_fastrtps_cpp`.
   - Changed `--packages-above-and-dependencies rclcpp` → `--packages-up-to test_rosidl_buffer` (build scope) and `--packages-above rclcpp` → `--packages-select test_rosidl_buffer` (test scope). SKILL.md "Build scope" + "Test selection" knobs at their cheapest settings — narrow to just the package whose tests fail.
   - Everything else verbatim: `--force-ansi-color`, the `--repo-file-url` URL, `--colcon-mixin-url`, `--visual-studio-version 2022`, `--build-args --event-handlers console_cohesion+ console_package_list+`, `--cmake-args -DINSTALL_EXAMPLES=OFF -DSECURITY=ON -DAPPEND_PROJECT_NAME_TO_INCLUDEDIR=ON`, `--test-args --event-handlers console_cohesion+ --retest-until-pass 2 --ctest-args -LE xfail --pytest-args -m "not xfail" --executor sequential`.
-- `-v "%CD%\workspace":"C:\ci"` — mount the host's `workspace/` (with `ros2/ci` cloned into it) at `C:\ci` inside the container. Matches the reference's `-v "C:\J\workspace\ci_windows":"C:\ci"` mount target; only the host source path differs.
-- `%IMAGE_TAG%` — our locally-built image (vs reference's `ros2_windows_ci_rolling`).
-- `cmd /c "pixi run --manifest-path C:\pixi_ws\pixi.toml --frozen python run_ros2_batch.py %CI_ARGS%"` — the entry command. Verbatim mirror of `log:231` (`Step 32/32` CMD). Since we **skipped** the Dockerfile CMD (Step 32/32) when writing our Dockerfile, we re-supply it here on the docker run command line so the container has something to execute.
+- `-v "${PWD}\workspace:C:\ci"` — mount the host's `workspace/` (with `ros2/ci` cloned into it) at `C:\ci` inside the container. Matches the reference's `-v "C:\J\workspace\ci_windows":"C:\ci"` mount target; only the host source path differs. `${PWD}` is PowerShell's automatic variable for the current directory (the runner's checkout root) — double-quoted here to trigger expansion.
+- `$env:IMAGE_TAG` — our locally-built image (vs reference's `ros2_windows_ci_rolling`). PowerShell env-var syntax; passed bare into the array since PowerShell evaluates variables in array literals.
+- `'cmd', '/c', 'pixi run --manifest-path C:\pixi_ws\pixi.toml --frozen python run_ros2_batch.py <inlined args>'` — the entry command, passed as three separate argv elements to `docker.exe`. Mirrors `log:231` (`Step 32/32` CMD) with the `%CI_ARGS%` reference replaced by the literal arg string (see "Why `shell: pwsh` + array splat" above). Since we **skipped** the Dockerfile CMD (Step 32/32) when writing our Dockerfile, we re-supply it here on the docker run command line so the container has something to execute.
 
 ### Step: Upload test results
 
