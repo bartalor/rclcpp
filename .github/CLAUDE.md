@@ -14,9 +14,7 @@ This file holds rules and pointers that survive across sessions. It complements 
 - ci.ros2.org Windows #27999 ran against rolling and produced 9 failing tests in `test_rosidl_buffer` under `rmw_fastrtps_cpp`. **Those same failures also showed up on the PR #3143 build (#27970).** Per `ci-flake-analysis.md`, every PR-#3143 failure was classified as flake / infra / environmental — none caused by the PR's changes.
 - So #27999 is our **reference environment**, not the failure cause. We are trying to reproduce the *environment* in which the same tests fail regardless of branch.
 
-This matters for diagnosing why our GHA run goes green: if the failures are environmental (FastRTPS discovery, network setup, race conditions), then matching the test scope is not enough — we have to match the environment. The biggest known env deltas are in `windows-repro.md`'s rationale section.
-
-If a future session sees a green run and concludes "PR is safe to merge", **that's wrong**. A green run means we failed to reproduce the env, not that the failures are gone.
+This matters for diagnosing the GHA run: success = the 9 `test_rosidl_buffer` tests fail the same way they do on ci.ros2.org. The **job** is expected to succeed (it runs tests and uploads results); what we're watching is the **test outcomes** inside the artifact. If those 9 tests pass (or don't run), we failed to reproduce the env — not "the PR is safe to merge". The biggest known env deltas are in `windows-repro.md`'s rationale section.
 
 ---
 
