@@ -19,6 +19,12 @@ ARG PIXI_ZIP_SHA256
 ARG PIXI_TOML_SHA
 ARG PIXI_TOML_URL=https://raw.githubusercontent.com/ros2/ros2/${PIXI_TOML_SHA}/pixi.toml
 
+# Promote ARGs to ENV so RUN lines see them. Per Docker docs, the builder
+# does NOT substitute ${VAR} inside RUN -- substitution there is the shell's
+# job. ENV makes them available to PowerShell as $env:VAR.
+ENV PIXI_VERSION=${PIXI_VERSION}
+ENV PIXI_ZIP_SHA256=${PIXI_ZIP_SHA256}
+
 RUN powershell -noexit "New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' -Name 'LongPathsEnabled' -Value 1 -PropertyType DWORD -Force"
 
 RUN powershell -noexit irm https://aka.ms/vs/17/release/vs_buildtools.exe -OutFile vs_buildtools_2022.exe
@@ -40,8 +46,8 @@ RUN vs_buildtools_2022.exe --quiet --wait --norestart `
     --add Microsoft.VisualStudio.Workload.MSBuildTools `
     --add Microsoft.VisualStudio.Workload.VCTools
 
-RUN powershell -noexit "irm https://github.com/prefix-dev/pixi/releases/download/${PIXI_VERSION}/pixi-x86_64-pc-windows-msvc.zip -OutFile pixi-x86_64-pc-windows-msvc.zip"
-RUN powershell -noexit "if ((get-filehash pixi-x86_64-pc-windows-msvc.zip -Algorithm SHA256).hash -ne '${PIXI_ZIP_SHA256}') { exit 1 }"
+RUN powershell -noexit "irm https://github.com/prefix-dev/pixi/releases/download/$env:PIXI_VERSION/pixi-x86_64-pc-windows-msvc.zip -OutFile pixi-x86_64-pc-windows-msvc.zip"
+RUN powershell -noexit "if ((get-filehash pixi-x86_64-pc-windows-msvc.zip -Algorithm SHA256).hash -ne $env:PIXI_ZIP_SHA256) { exit 1 }"
 RUN powershell -noexit "Expand-Archive -Path pixi-x86_64-pc-windows-msvc.zip -DestinationPath (Join-Path $Env:USERPROFILE\.pixi 'bin') -Force"
 RUN powershell -noexit "$bindir = Join-Path $Env:USERPROFILE\.pixi 'bin' ; $pathkey = (Get-Item -Path 'HKCU:').OpenSubKey('Environment', $true) ; $oldpath = $pathkey.GetValue('PATH', $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames) ; $newpath = \"$bindir;$oldpath\" ; $pathkey.SetValue('PATH', $newpath, [Microsoft.Win32.RegistryValueKind]::String)"
 
