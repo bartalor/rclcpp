@@ -12,6 +12,8 @@ This file holds rules and pointers that survive across sessions. It complements 
 
 For diagnosing the GHA run: success = the 9 `test_rosidl_buffer` tests fail the same way they do on ci.ros2.org. The **job** is expected to succeed (it runs tests and uploads results); what we watch is the **test outcomes** inside the artifact. If those 9 tests pass (or don't run), we failed to reproduce the env — not "the PR is safe to merge". Biggest known env deltas: see `windows-repro.md`'s rationale section.
 
+Use common sense about what PR #3143 could plausibly have caused. Look at its actual changes and reason about whether they can reach the failing test at all.
+
 ---
 
 ## Build artifacts and other downloads
