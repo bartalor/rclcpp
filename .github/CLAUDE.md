@@ -18,6 +18,14 @@ This matters for diagnosing the GHA run: success = the 9 `test_rosidl_buffer` te
 
 ---
 
+## Build artifacts and other downloads
+
+**Never invent a path or "convention" on the fly.** Before downloading anything (GHA artifacts, run logs, release tarballs, anything), ask the user where it should go. One pre-existing file in `/tmp/` is not a convention — it's one file. Do not generalize from it.
+
+If a real convention exists, it will be documented here. Until then, ask.
+
+---
+
 ## File map: what each thing is for
 
 ### `.github/workflows/windows-repro.yml`
