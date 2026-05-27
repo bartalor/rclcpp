@@ -6,6 +6,20 @@ This file holds rules and pointers that survive across sessions. It complements 
 
 ---
 
+## What we're trying to reproduce — and what we are NOT
+
+**The repro target is PR #3143's CI failures, not #27999's baseline failures.**
+
+- PR #3143 (`bar/issue-2898`): "node_parameters: reject non-finite values in floating-point range check". A one-function source change in rclcpp.
+- ci.ros2.org Windows #27999 ran against rolling and produced 9 failing tests in `test_rosidl_buffer` under `rmw_fastrtps_cpp`. **Those same failures also showed up on the PR #3143 build (#27970).** Per `ci-flake-analysis.md`, every PR-#3143 failure was classified as flake / infra / environmental — none caused by the PR's changes.
+- So #27999 is our **reference environment**, not the failure cause. We are trying to reproduce the *environment* in which the same tests fail regardless of branch.
+
+This matters for diagnosing why our GHA run goes green: if the failures are environmental (FastRTPS discovery, network setup, race conditions), then matching the test scope is not enough — we have to match the environment. The biggest known env deltas are in `windows-repro.md`'s rationale section.
+
+If a future session sees a green run and concludes "PR is safe to merge", **that's wrong**. A green run means we failed to reproduce the env, not that the failures are gone.
+
+---
+
 ## File map: what each thing is for
 
 ### `.github/workflows/windows-repro.yml`
