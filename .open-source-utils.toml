@@ -13,6 +13,7 @@ personal_branch = [
     ".claude/",
     "CLAUDE.md",
     "renovate.json",
+    ".skipped-issues.md",
 ]
 pr_excluded = [
     ".devcontainer/",
@@ -21,4 +22,5 @@ pr_excluded = [
     "CLAUDE.md",
     "renovate.json",
     "PR_DESCRIPTION.md",
+    ".skipped-issues.md",
 ]
