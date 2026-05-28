@@ -1,0 +1,101 @@
+name: windows-repro-27999
+
+# Rebuilds the ci.ros2.org Windows build #27999 docker image and runs the
+# failing tests inside it on a GitHub Actions windows-2022 runner.
+#
+# Deviations from #27999's Dockerfile (documented, intentional):
+#   - Base image: mcr.microsoft.com/windows/server:ltsc2022 (was :2009).
+#     Windows containers require host/image kernel match under
+#     --isolation=process; GHA windows-2022 runners are ltsc2022 and the
+#     only isolation available is process. :2009 image will not start.
+#   - Skip VS BuildTools 2019 install (#27999 Steps 8-9). #27999 builds with
+#     --visual-studio-version 2022; 2019 is dead weight here.
+#   - Skip RTI Connext install (#27999 Steps 25-30). The 9 failing tests
+#     all run under rmw_fastrtps_cpp; Connext is not exercised.
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: windows-repro-27999
+  cancel-in-progress: false
+
+env:
+  PIXI_VERSION: v0.41.0
+  PIXI_ZIP_SHA256: 16b1b83f2d6f04a990ef7c6eea2bb45d2e846d122be312ca3f5f1b14be7cdc6d
+  PIXI_TOML_SHA: a22d7b50717dad7c8b3b2bfb36055684600925a5
+  IMAGE_TAG: ros2_windows_ci_rolling_repro
+
+jobs:
+  build-and-test:
+    runs-on: windows-2022
+    timeout-minutes: 350
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      # Workaround for actions/runner-images#13729: Docker Engine v29+ on
+      # windows-2022 randomly fails to start at runner boot (Hyper-V virtual
+      # switch race; Microsoft confirmed open, no ETA as of 2026-05-15).
+      # Shape mirrors spiffe/spire's wait-for-docker-windows.ps1.
+      - name: Wait for Docker
+        shell: pwsh
+        run: |
+          for ($i = 1; $i -le 60; $i++) {
+            docker info > $null 2>&1
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            if ($i -eq 1) {
+              Get-Service | Where-Object { $_.Name -like '*docker*' } |
+                Where-Object { $_.Status -ne 'Running' } |
+                ForEach-Object { Start-Service $_.Name -ErrorAction SilentlyContinue }
+            }
+            Start-Sleep -Seconds 2
+          }
+          Write-Error "Docker failed to start after 120s"
+          exit 1
+
+      - name: docker build image
+        shell: cmd
+        run: |
+          docker build --isolation=process ^
+            --build-arg PIXI_VERSION=%PIXI_VERSION% ^
+            --build-arg PIXI_ZIP_SHA256=%PIXI_ZIP_SHA256% ^
+            --build-arg PIXI_TOML_SHA=%PIXI_TOML_SHA% ^
+            -f .github/windows-repro-27999.Dockerfile ^
+            -t %IMAGE_TAG% .
+
+      - name: Clone ros2/ci into workspace (provides run_ros2_batch.py)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path workspace | Out-Null
+          git clone --depth 1 https://github.com/ros2/ci.git workspace_tmp
+          # ros2_batch expects run_ros2_batch.py and ros2_batch_job/ at C:\ci root
+          Copy-Item -Recurse -Force workspace_tmp\* workspace\
+          Remove-Item -Recurse -Force workspace_tmp
+
+      - name: docker run (mirrors ci.ros2.org #27999 invocation, scoped to failing tests)
+        shell: pwsh
+        run: |
+          # PowerShell array splat: each element becomes one argv to docker.exe.
+          # Single-quoted strings are literal end-to-end -- no variable expansion,
+          # no backtick escape, no surprises around the embedded `"not xfail"`.
+          $dockerArgs = @(
+            'run', '--isolation=process', '--rm',
+            '-e', 'ROS_DOMAIN_ID=1',
+            '-v', "${PWD}\workspace:C:\ci",
+            $env:IMAGE_TAG,
+            'cmd', '/c',
+            'pixi run --manifest-path C:\pixi_ws\pixi.toml --frozen python run_ros2_batch.py --force-ansi-color --workspace-path C:\ci --ignore-rmw rmw_fastrtps_dynamic_cpp --ignore-rmw rmw_connextdds --ignore-rmw rmw_cyclonedds_cpp --repo-file-url https://gist.githubusercontent.com/fujitatomoya/e96e535bdc812744725b6237e9eb22e6/raw/ab84ebe82133d581d33d732a722c20660dfc487c/ros2.repos --colcon-mixin-url https://raw.githubusercontent.com/colcon/colcon-mixin-repository/master/index.yaml --visual-studio-version 2022 --build-args --event-handlers console_cohesion+ console_package_list+ --cmake-args -DINSTALL_EXAMPLES=OFF -DSECURITY=ON -DAPPEND_PROJECT_NAME_TO_INCLUDEDIR=ON --packages-up-to test_rosidl_buffer --test-args --event-handlers console_cohesion+ --retest-until-pass 2 --ctest-args -LE xfail --pytest-args -m "not xfail" --executor sequential --packages-select test_rosidl_buffer'
+          )
+          docker @dockerArgs
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            workspace/**/test_results/**/*.xml
+            workspace/**/log/**/*
+          retention-days: 7
