@@ -43,6 +43,8 @@
         "source=${localEnv:HOME}/dotfiles/claude/.claude,target=/home/ubuntu/dotfiles/claude/.claude,type=bind,readonly",
         "source=${localEnv:HOME}/.config/git/ignore,target=/home/ubuntu/.config/git/ignore,type=bind,readonly",
         "source=${localEnv:HOME}/.config/gh,target=/home/ubuntu/.config/gh,type=bind",
+        "source=${localEnv:HOME}/.nvm/versions/node/v20.20.2,target=/home/ubuntu/.nvm/versions/node/v20.20.2,type=bind,readonly",
+        "source=${localEnv:HOME}/.npm-global,target=/home/ubuntu/.npm-global,type=bind,readonly",
         "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
         "source=/dev/dri,target=/dev/dri,type=bind,consistency=cached",
         "source=ccache-${devcontainerId},target=/tmp/.ccache,type=volume",
