@@ -33,6 +33,7 @@ RUN apt-get update && \
       ccache \
       lld \
       linux-tools-generic \
+      lsof \
       heaptrack \
       valgrind \
       libc6-dbg \
