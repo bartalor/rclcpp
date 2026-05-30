@@ -58,3 +58,4 @@ copy_if_changed() {
 copy_if_changed "$HOME/dotfiles/path_scripts/.local/bin/git-Pretty" /usr/local/bin/git-Pretty
 copy_if_changed "$HOME/dotfiles/bash/.bashrc.d/git-completions.sh" /etc/bash_completion.d/git-completions.sh
 copy_if_changed "$HOME/.netrc" /home/ubuntu/.netrc
+copy_if_changed "$HOME/.mcp-memory/.env" /home/ubuntu/.mcp-memory/.env
