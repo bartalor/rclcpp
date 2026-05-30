@@ -48,6 +48,7 @@
         "source=${localEnv:HOME}/.local/share/uv,target=/home/bar/.local/share/uv,type=bind,readonly",
         "source=${localEnv:HOME}/.local/bin,target=/home/bar/.local/bin,type=bind,readonly",
         "source=${localEnv:HOME}/.local/share/mcp-memory,target=/home/bar/.local/share/mcp-memory,type=bind",
+        "source=${localEnv:HOME}/.local/share/claude,target=/home/bar/.local/share/claude,type=bind,readonly",
         "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
         "source=/dev/dri,target=/dev/dri,type=bind,consistency=cached",
         "source=ccache-${devcontainerId},target=/tmp/.ccache,type=volume",
