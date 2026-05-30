@@ -51,6 +51,7 @@ copy_if_changed() {
     if [ "$src_sum" = "$dst_sum" ]; then
         return
     fi
+    docker exec "$CONTAINER" mkdir -p "$(dirname "$dst")"
     docker cp "$src" "$CONTAINER:$dst"
     echo "copy $src -> $CONTAINER:$dst"
 }
