@@ -1,6 +1,6 @@
 ---
-name: project-memory-read
-description: Use BEFORE diagnosing a bug, explaining behaviour in a sensitive area, proposing a fix, or writing a new note — to check what we already know about this repo via memory-mcp. Also triggers on phrases like "do we have notes on", "what do we know about", "recall", "what did we decide about", "did we hit this before", "search memories". Always read before write (see also project-memory-write).
+name: memory-read
+description: Use BEFORE diagnosing a bug, explaining behaviour in a sensitive area, proposing a fix, or writing a new note — to check what we already know about this repo via memory-mcp. Also triggers on phrases like "do we have notes on", "what do we know about", "recall", "what did we decide about", "did we hit this before", "search memories". Always read before write (see also memory-write).
 ---
 
 # Project memory — READ side (rclcpp)
@@ -58,7 +58,7 @@ read-side workflow on top.
 - Cite the memory's `content_hash` (or a unique phrase from it) when you
   use it in your reply, so the user can audit the source.
 - If recall surfaces a memory that is now **wrong or incomplete**, do
-  not silently work around it — hand off to `project-memory-write` to
+  not silently work around it — hand off to `memory-write` to
   update or version it.
 - If recall surfaces **two memories that contradict**, that is a
   conflict: surface both to the user and use `memory_conflicts` /
