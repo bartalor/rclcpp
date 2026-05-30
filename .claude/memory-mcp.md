@@ -1,9 +1,5 @@
 # memory-mcp conventions (rclcpp)
 
-Shared reference for the `project-memory-write` and `project-memory-read`
-skills. The write/read skills are the entry points; this doc holds the
-mechanics so they don't duplicate each other.
-
 Long-lived project notes for this repo live in memory-mcp, not in files. Do
 not create `.claude/design_decisions/` or similar note trees.
 
