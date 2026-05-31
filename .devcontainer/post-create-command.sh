@@ -10,6 +10,9 @@ cp /etc/skel/.bashrc ~/
 # Source overlay workspace for interactive use
 echo 'source "$OVERLAY_WS/install/setup.bash"' >> ~/.bashrc
 
+# Wire repo-tracked git hooks
+git -C "$(cd "$(dirname "$0")/.." && pwd)" config core.hooksPath .githooks
+
 # Run in-container hook for each enabled plugin (in-container.sh or .py)
 HERE="$(cd "$(dirname "$0")" && pwd)"
 for plugin in $("$HERE/list-enabled-plugins.py"); do
