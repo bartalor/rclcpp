@@ -60,6 +60,7 @@ copy_if_changed "$HOME/dotfiles/path_scripts/.local/bin/git-Pretty" /usr/local/b
 copy_if_changed "$HOME/dotfiles/path_scripts/.local/bin/ram-cleanup" /usr/local/bin/ram-cleanup
 copy_if_changed "$HOME/dotfiles/bash/.bashrc.d/git-completions.sh" /etc/bash_completion.d/git-completions.sh
 copy_if_changed "$HOME/.netrc" /home/ubuntu/.netrc
+copy_if_changed "$HOME/dotfiles/path_scripts/.local/bin/claude-mcp-toggle" /usr/local/bin/claude-mcp-toggle
 
 # Run on-host hook for each enabled plugin (sourced so it sees copy_if_changed + $CONTAINER)
 HERE="$(cd "$(dirname "$0")" && pwd)"
