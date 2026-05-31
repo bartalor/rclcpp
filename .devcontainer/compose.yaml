@@ -1,0 +1,44 @@
+include:
+  # Comment out a plugin line to disable it. Toggle requires container rebuild.
+  - plugins/mcp-memory/compose.yaml
+
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: sleep infinity
+    network_mode: host
+    pid: host
+    ipc: host
+    cap_add:
+      - PERFMON
+      - SYS_PTRACE
+    environment:
+      DISPLAY: ${DISPLAY:-unix:0}
+      ROS_AUTOMATIC_DISCOVERY_RANGE: LOCALHOST
+      ROS_DOMAIN_ID: "42"
+      OVERLAY_MIXINS: rel-with-deb-info ccache compile-commands lld
+      CCACHE_DIR: /tmp/.ccache
+    volumes:
+      # claude / dotfiles
+      - ${HOME}/.claude:/home/ubuntu/.claude
+      - ${HOME}/dotfiles/claude/.claude:/home/ubuntu/dotfiles/claude/.claude:ro
+      - ${HOME}/.config/git/ignore:/home/ubuntu/.config/git/ignore:ro
+      - ${HOME}/.config/gh:/home/ubuntu/.config/gh
+      # node / npm / uv tooling from host
+      - ${HOME}/.nvm/versions/node/v20.20.2:/home/ubuntu/.nvm/versions/node/v20.20.2:ro
+      - ${HOME}/.npm-global:/home/ubuntu/.npm-global:ro
+      - ${HOME}/.local/share/uv:/home/bar/.local/share/uv:ro
+      - ${HOME}/.local/bin:/home/bar/.local/bin:ro
+      - ${HOME}/.local/share/claude:/home/bar/.local/share/claude:ro
+      # X11 + GPU
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /dev/dri:/dev/dri
+      # named volumes for ccache + overlay build tree
+      - ccache:/tmp/.ccache
+      - overlay:/opt/overlay_ws
+
+volumes:
+  ccache:
+  overlay:

@@ -1,0 +1,6 @@
+services:
+  dev:
+    volumes:
+      - ${HOME}/.local/bin/memory:/usr/local/bin/memory:ro
+      - ${HOME}/.local/share/mcp-memory:/home/ubuntu/.local/share/mcp-memory
+      - ${HOME}/.cache/huggingface:/home/ubuntu/.cache/huggingface

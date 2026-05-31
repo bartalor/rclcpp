@@ -10,4 +10,12 @@ cp /etc/skel/.bashrc ~/
 # Source overlay workspace for interactive use
 echo 'source "$OVERLAY_WS/install/setup.bash"' >> ~/.bashrc
 
-.devcontainer/register-memory-mcp.py
+# Run in-container hook for each enabled plugin
+HERE="$(cd "$(dirname "$0")" && pwd)"
+for plugin in $("$HERE/list-enabled-plugins.py"); do
+    hook="$HERE/plugins/$plugin/in-container.sh"
+    if [ -x "$hook" ]; then
+        echo "plugin $plugin: running in-container.sh"
+        "$hook"
+    fi
+done
