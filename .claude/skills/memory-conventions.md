@@ -7,7 +7,20 @@ Backend: `basic-memory` MCP server. Notes are markdown files on disk;
 tags + `[[wikilinks]]` are the index. Folder layout is for humans only —
 retrieval is by tag.
 
-## Tree shape
+These conventions are guidance, not law. Deviate when the cost of
+conforming outweighs the benefit — but say so in the note (one line:
+"deviation: <what> because <why>") so the next reader knows it was
+deliberate. When a deviation becomes a recurring pattern, update this
+file rather than letting drift go undocumented.
+
+Every note belongs to a category: either an issue (`issue-<N>`) or
+`utility` (anything not tied to an issue — branch tooling, local
+workflow, etc.). New categories may be added later. The tree shape,
+note kinds, and append-only rules below apply to the issue category.
+Utility notes are flat, edit-in-place, and just need the scope
+sentence + tags `ros2`, `rclcpp`, `utility`, `<topic>`.
+
+## Tree shape (issue category)
 
 Per issue, notes form a tree rooted at `status`.
 
