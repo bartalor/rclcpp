@@ -21,6 +21,10 @@ services:
       OVERLAY_MIXINS: rel-with-deb-info ccache compile-commands lld
       CCACHE_DIR: /tmp/.ccache
     volumes:
+      # workspace: bind host repo to its own host path AND to overlay src dir.
+      # ${PWD} is .devcontainer/ when devcontainers invokes compose, so .. is the repo root.
+      - ${PWD}/..:${PWD}/..
+      - ${PWD}/..:/opt/overlay_ws/src/rclcpp
       # claude / dotfiles
       - ${HOME}/.claude:/home/ubuntu/.claude
       - ${HOME}/dotfiles/claude/.claude:/home/ubuntu/dotfiles/claude/.claude:ro
