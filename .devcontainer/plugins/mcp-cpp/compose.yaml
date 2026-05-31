@@ -1,0 +1,4 @@
+services:
+  dev:
+    volumes:
+      - ${HOME}/.cargo/bin/mcp-cpp-server:/usr/local/bin/mcp-cpp-server:ro
