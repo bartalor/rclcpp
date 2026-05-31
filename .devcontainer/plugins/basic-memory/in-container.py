@@ -11,7 +11,12 @@ desired = {
     "type": "stdio",
     "command": "/home/bar/.local/bin/basic-memory",
     "args": ["mcp"],
-    "env": {},
+    # Container user is "ubuntu", so Path.home() resolves to /home/ubuntu.
+    # Override so basic-memory uses the bind-mounted host paths under /home/bar.
+    "env": {
+        "BASIC_MEMORY_CONFIG_DIR": "/home/bar/.basic-memory",
+        "BASIC_MEMORY_HOME": "/home/bar/basic-memory",
+    },
 }
 if servers.get("basic-memory") != desired:
     servers["basic-memory"] = desired
