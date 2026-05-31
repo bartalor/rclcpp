@@ -58,7 +58,16 @@ copy_if_changed() {
 
 copy_if_changed "$HOME/dotfiles/path_scripts/.local/bin/git-Pretty" /usr/local/bin/git-Pretty
 copy_if_changed "$HOME/dotfiles/path_scripts/.local/bin/ram-cleanup" /usr/local/bin/ram-cleanup
-copy_if_changed "$HOME/dotfiles/path_scripts/.local/bin/claude-mcp-toggle" /usr/local/bin/claude-mcp-toggle
 copy_if_changed "$HOME/dotfiles/bash/.bashrc.d/git-completions.sh" /etc/bash_completion.d/git-completions.sh
 copy_if_changed "$HOME/.netrc" /home/ubuntu/.netrc
-copy_if_changed "$HOME/.mcp-memory/.env" /home/ubuntu/.mcp-memory/.env
+
+# Run on-host hook for each enabled plugin (sourced so it sees copy_if_changed + $CONTAINER)
+HERE="$(cd "$(dirname "$0")" && pwd)"
+for plugin in $("$HERE/list-enabled-plugins.py"); do
+    hook="$HERE/plugins/$plugin/on-host.sh"
+    if [ -f "$hook" ]; then
+        echo "plugin $plugin: running on-host.sh"
+        # shellcheck source=/dev/null
+        . "$hook"
+    fi
+done
