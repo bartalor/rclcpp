@@ -1,0 +1,7 @@
+services:
+  dev:
+    volumes:
+      # config + sqlite db + fastembed cache (same host path inside container)
+      - ${HOME}/.basic-memory:/home/bar/.basic-memory
+      # notes / project content
+      - ${HOME}/basic-memory:/home/bar/basic-memory
