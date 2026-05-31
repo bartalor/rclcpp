@@ -23,9 +23,17 @@ read-side workflow on top.
 
 ## Workflow
 
-1. **Always filter by the project tag.** Every query must include
+1. **Infer the topic from context — do not ask the user for it.**
+   Obvious signals already in the prompt or environment are enough to
+   form a first query: the current branch name (e.g.
+   `bar/issue-2876-dev` → tag `issue-2876`), file paths the user
+   mentioned, the active diff, `ide_selection`, recent commit subjects.
+   Asking "what should I search for?" when the branch or the open file
+   already answers it is the wrong move — just query. Refine after you
+   see results; only ask if context is genuinely ambiguous.
+2. **Always filter by the project tag.** Every query must include
    `tags: "rclcpp"` so cross-project memories don't pollute results.
-2. **Start with `mcp__memory__memory_search`** (semantic):
+3. **Start with `mcp__memory__memory_search`** (semantic):
 
    ```
    memory_search { query: "<topic or symbol>", tags: "rclcpp", limit: 10 }
@@ -38,16 +46,16 @@ read-side workflow on top.
                    tag_match: "all", limit: 10 }
    ```
 
-3. **Fall back to `mcp__memory__memory_list`** for categorical browsing
+4. **Fall back to `mcp__memory__memory_list`** for categorical browsing
    when you want everything of a given type/tag rather than the most
    semantically similar hits (e.g. all `decision` memories tagged
    `parameters`).
-4. **Walk the graph from a known hit.** Once `memory_search` returns a
+5. **Walk the graph from a known hit.** Once `memory_search` returns a
    relevant `content_hash`, use `mcp__memory__memory_graph`
    (`action: "connected"` or `"subgraph"`) to surface linked memories
    (e.g. the `decision` paired with a found `bug`, the `learning`
    extracted from a fix).
-5. **Check superseded versions only when the current memory looks
+6. **Check superseded versions only when the current memory looks
    stale or you're tracing a past wrong belief:**
    `memory_search { ..., include_superseded: true }`. Default off —
    superseded entries are hidden because they were corrected for a
