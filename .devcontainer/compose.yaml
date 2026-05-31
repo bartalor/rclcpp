@@ -2,6 +2,7 @@ include:
   # Comment out a plugin line to disable it. Toggle requires container rebuild.
   # - plugins/mcp-memory/compose.yaml
   - plugins/basic-memory/compose.yaml
+  - plugins/mcp-cpp/compose.yaml
 
 services:
   dev:
