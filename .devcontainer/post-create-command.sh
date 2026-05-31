@@ -10,12 +10,13 @@ cp /etc/skel/.bashrc ~/
 # Source overlay workspace for interactive use
 echo 'source "$OVERLAY_WS/install/setup.bash"' >> ~/.bashrc
 
-# Run in-container hook for each enabled plugin
+# Run in-container hook for each enabled plugin (in-container.sh or .py)
 HERE="$(cd "$(dirname "$0")" && pwd)"
 for plugin in $("$HERE/list-enabled-plugins.py"); do
-    hook="$HERE/plugins/$plugin/in-container.sh"
-    if [ -x "$hook" ]; then
-        echo "plugin $plugin: running in-container.sh"
-        "$hook"
-    fi
+    for hook in "$HERE/plugins/$plugin"/in-container.{sh,py}; do
+        if [ -x "$hook" ]; then
+            echo "plugin $plugin: running $(basename "$hook")"
+            "$hook"
+        fi
+    done
 done
