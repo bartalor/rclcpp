@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Block personal-path changes on non-personal branches.
+
+Config: .open-source-utils.toml at repo root.
+  branches.personal           -- the only branch allowed to touch personal paths
+  paths.personal_branch       -- list of path prefixes considered personal
+If the config file is missing, abort.
+"""
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+
+def fail(msg: str) -> None:
+    sys.stderr.write(f"pre-commit: {msg}\n")
+    sys.exit(1)
+
+
+def main() -> None:
+    repo_root = Path(
+        subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
+    )
+    config_path = repo_root / ".open-source-utils.toml"
+    if not config_path.exists():
+        fail(f"missing {config_path.name}; refusing to commit")
+
+    with config_path.open("rb") as fh:
+        config = tomllib.load(fh)
+
+    personal_branch = config["branches"]["personal"]
+    personal_paths = config["paths"]["personal_branch"]
+
+    current_branch = subprocess.check_output(
+        ["git", "symbolic-ref", "--short", "HEAD"], text=True
+    ).strip()
+    if current_branch == personal_branch:
+        return
+
+    staged = subprocess.check_output(
+        ["git", "diff", "--cached", "--name-only", "-z"], text=True
+    ).split("\0")
+    staged = [p for p in staged if p]
+
+    offenders = [
+        path
+        for path in staged
+        if any(path == prefix.rstrip("/") or path.startswith(prefix) for prefix in personal_paths)
+    ]
+    if offenders:
+        sys.stderr.write(
+            f"pre-commit: refusing to commit personal paths on '{current_branch}' "
+            f"(belong on '{personal_branch}'):\n"
+        )
+        for path in offenders:
+            sys.stderr.write(f"  {path}\n")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
