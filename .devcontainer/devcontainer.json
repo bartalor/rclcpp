@@ -3,10 +3,6 @@
     "dockerComposeFile": "compose.yaml",
     "service": "dev",
     "workspaceFolder": "${localWorkspaceFolder}",
-    "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
-    "mounts": [
-        "source=${localWorkspaceFolder},target=/opt/overlay_ws/src/rclcpp,type=bind"
-    ],
     "customizations": {
         "vscode": {
             "extensions": [
