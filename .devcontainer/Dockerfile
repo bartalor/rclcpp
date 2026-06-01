@@ -43,6 +43,10 @@ RUN apt-get update && \
       python3-rosdep \
     && rm -rf /var/lib/apt/lists/*
 
+# uv (static binary, no host deps)
+RUN curl -LsSf https://astral.sh/uv/install.sh | \
+    UV_INSTALL_DIR=/usr/local/bin sh
+
 # share the colcon mixin index (release, ccache, compile-commands, lld, ...)
 # system-wide via COLCON_HOME so root and ubuntu read the same config.
 ENV COLCON_HOME=/etc/colcon
