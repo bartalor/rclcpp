@@ -1,0 +1,5 @@
+services:
+  dev:
+    volumes:
+      - ${HOME}/.local/share/uv:/home/ubuntu/.local/share/uv:ro
+      - ${HOME}/.local/bin:/home/ubuntu/.local/bin:ro
