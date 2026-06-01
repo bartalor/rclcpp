@@ -18,6 +18,7 @@
             }
         }
     },
+    "initializeCommand": ".devcontainer/post-rebuild-host-setup.sh",
     "onCreateCommand": ".devcontainer/on-create-command.sh",
     "updateContentCommand": ".devcontainer/update-content-command.sh",
     "postCreateCommand": ".devcontainer/post-create-command.sh",
