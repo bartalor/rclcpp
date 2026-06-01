@@ -33,10 +33,9 @@ services:
       - ${HOME}/dotfiles/claude/.claude:/home/ubuntu/dotfiles/claude/.claude:ro
       - ${HOME}/.config/git/ignore:/home/ubuntu/.config/git/ignore:ro
       - ${HOME}/.config/gh:/home/ubuntu/.config/gh
-      # node / npm / uv tooling from host
+      # node / npm tooling from host
       - ${HOME}/.nvm/versions/node/v20.20.2:/home/ubuntu/.nvm/versions/node/v20.20.2:ro
       - ${HOME}/.npm-global:/home/ubuntu/.npm-global:ro
-      - ${HOME}/.local/share/uv:/home/bar/.local/share/uv:ro
       - ${HOME}/.local/bin:/home/bar/.local/bin:ro
       - ${HOME}/.local/share/claude:/home/bar/.local/share/claude:ro
       # X11 + GPU
