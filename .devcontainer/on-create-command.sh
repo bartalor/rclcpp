@@ -14,6 +14,11 @@ sudo apt-get install -y python3-vcstool
 sudo install -d -o ubuntu -g ubuntu $OVERLAY_WS/src
 vcs import --input .devcontainer/overlay.repos $OVERLAY_WS/src
 
+# on-create runs on a fresh container — drop any stale build/install from the
+# named overlay volume so CMake caches can't pin packages (e.g. rcl_DIR) to
+# /opt/ros/$ROS_DISTRO from before the source overlay existed.
+rm -rf $OVERLAY_WS/build $OVERLAY_WS/install $OVERLAY_WS/log
+
 # install overlay deps from mounted source
 rosdep update --rosdistro=$ROS_DISTRO
 sudo rosdep install -q -y \
