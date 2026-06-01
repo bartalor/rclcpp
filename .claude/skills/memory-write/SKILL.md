@@ -87,10 +87,33 @@ Do **not** wait for "we're done." Save incrementally.
 
 ## Fixing wrong / stale memory
 
-- **Editable kind drifted from reality** → `edit_note` to overwrite.
-  If the scope sentence no longer matches the body, either re-scope
-  the sentence or split the note (move the off-scope content into a
-  new child and link).
+- **These notes are your working memory, not the user's documentation.**
+  The user doesn't read them. They exist so a fresh Claude instance
+  can pick up the thread without re-deriving everything. Optimize for
+  *your* re-read, not for completeness.
+
+- **Every `edit_note` on an editable kind triggers a full re-read
+  first.** Before you write, read the whole note and ask:
+  - Does the scope sentence still match the body? If not, re-scope
+    or split.
+  - Did this section help me just now, or could it plausibly help
+    next time? If neither, cut it. Bloat costs the next instance
+    context window for nothing.
+  - Are any facts contradicted by current code or another note?
+    Overwrite the wrong fact (editable) or append a supersede
+    (append-only).
+
+  You opened the note. You're already paying the read cost. Use it.
+
+- **Verify before you touch.** Adds, edits, and deletes all have to
+  clear the same bar: 100% confidence the claim is true *right now*
+  against the current code. A hasty add poisons memory with a
+  half-verified fact; a hasty delete loses the one bullet the next
+  instance needed. If you can't verify it this turn — by reading the
+  code, running it, or asking the user — leave the note alone. "I
+  think this is probably stale" is not grounds to delete. "This
+  sounds right" is not grounds to add. Slower is safer; the cost of
+  a wrong write is paid by every future instance.
 
 - **Append-only entry is now wrong** → append a superseding entry.
   Reference the prior entry by `[[wikilink]]` (or by its section
@@ -135,12 +158,20 @@ work you produce a finding that's really about issue-5678, write it
 under `issue-5678` tags and link from `issue-1234` via `[[wikilink]]`.
 Do not double-tag — it pollutes tag queries on both sides.
 
+## One write per turn
+
+One MCP write per turn. No parallel writes, no chained edits in the
+same response. Wait for the user before the next one.
+
 ## Don't
 
 - Don't write without first invoking `memory-read`.
 - Don't skip the scope sentence on line 1.
 - Don't edit a past `finding` or `decision` — supersede instead.
 - Don't paste verbatim code from the repo. Link to `file:line`.
+- Don't store commit hashes — they rot when branches are amended,
+  rebased onto upstream, or squashed. Reference changes by file +
+  symbol + behaviour. (See `memory-conventions.md` "What NOT to store".)
 - Don't hand-stamp dates. The server tracks `created_at` /
   `updated_at`.
 - Don't leave `status`'s `[[wikilinks]]` stale after creating or
