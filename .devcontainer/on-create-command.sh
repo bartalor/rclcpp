@@ -11,7 +11,7 @@ git config --global --add safe.directory "*"
 . /opt/ros/$ROS_DISTRO/setup.sh
 sudo apt-get update
 sudo apt-get install -y python3-vcstool
-mkdir -p $OVERLAY_WS/src
+sudo install -d -o ubuntu -g ubuntu $OVERLAY_WS/src
 vcs import --input .devcontainer/overlay.repos $OVERLAY_WS/src
 
 # install overlay deps from mounted source
