@@ -7,10 +7,15 @@ set -eo pipefail
 
 git config --global --add safe.directory "*"
 
-# install overlay deps from mounted source
+# import pinned source overlays (see overlay.repos for rationale)
 . /opt/ros/$ROS_DISTRO/setup.sh
-rosdep update --rosdistro=$ROS_DISTRO
 sudo apt-get update
+sudo apt-get install -y python3-vcstool
+mkdir -p $OVERLAY_WS/src
+vcs import --input .devcontainer/overlay.repos $OVERLAY_WS/src
+
+# install overlay deps from mounted source
+rosdep update --rosdistro=$ROS_DISTRO
 sudo rosdep install -q -y \
     --from-paths $OVERLAY_WS/src \
     --ignore-src \
