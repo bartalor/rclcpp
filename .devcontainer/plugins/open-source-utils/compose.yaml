@@ -1,0 +1,4 @@
+services:
+  dev:
+    volumes:
+      - ${HOME}/dotfiles/open-source-utils:/home/ubuntu/dotfiles/open-source-utils:ro

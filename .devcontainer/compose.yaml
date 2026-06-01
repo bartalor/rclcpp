@@ -3,6 +3,7 @@ include:
   # - plugins/mcp-memory/compose.yaml
   - plugins/basic-memory/compose.yaml
   - plugins/mcp-cpp/compose.yaml
+  - plugins/open-source-utils/compose.yaml
 
 services:
   dev:
