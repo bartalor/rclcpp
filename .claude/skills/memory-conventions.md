@@ -90,6 +90,10 @@ even when content references another (see cross-issue links below).
 - Generic ROS 2 / rclcpp knowledge available in upstream docs. Store
   what is specific to *this* investigation.
 - Transient debugging output longer than a few lines. Summarize it.
+- **Commit hashes.** Branches get amended, rebased onto upstream, or
+  squashed; SHAs rot and become orphan refs that mislead future reads.
+  Reference changes by file + symbol + behaviour ("the `ignore_callbacks`
+  flag on `NodeParameters::declare_parameter`"), not by hash.
 
 ## Editable vs append-only — fixing wrong memory
 
