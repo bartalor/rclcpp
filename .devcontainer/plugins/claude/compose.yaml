@@ -1,0 +1,4 @@
+services:
+  dev:
+    volumes:
+      - ${HOME}/.local/share/claude:/home/ubuntu/.local/share/claude:ro

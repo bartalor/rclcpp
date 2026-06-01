@@ -5,6 +5,7 @@ include:
   - plugins/mcp-cpp/compose.yaml
   - plugins/open-source-utils/compose.yaml
   - plugins/uv/compose.yaml
+  - plugins/claude/compose.yaml
 
 services:
   dev:
