@@ -1,0 +1,12 @@
+# Packages we source-build into the overlay to insulate the devcontainer from
+# rolling-deb drift (symbols that rclcpp HEAD calls before they appear in the
+# installed ros-rolling-* debs). Keep this list minimal — add a package only
+# when an apt-installed version is missing a symbol rclcpp uses.
+#
+# Bump SHAs deliberately. To refresh:
+#   gh api repos/ros2/<pkg>/commits/rolling --jq .sha
+repositories:
+  ros2/rcl:
+    type: git
+    url: https://github.com/ros2/rcl.git
+    version: 3d6cea5f178a44c996b47acae882da53283d2edb
