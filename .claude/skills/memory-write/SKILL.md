@@ -55,25 +55,20 @@ Do **not** wait for "we're done." Save incrementally.
 
 ## Write rules per note kind
 
-- **status** — `edit_note` (overwrite). One short paragraph: scope,
-  current state, next step. Plus `[[wikilinks]]` down to whichever
-  children exist. Update every time progress changes.
+All kinds are `edit_note` (overwrite). Keep them current; staleness
+is a bug. When a fact is wrong, fix it in place — no supersede
+chains, no append-only history.
 
+- **status** — one short paragraph: scope, current state, next step.
+  Plus `[[wikilinks]]` down to whichever children exist. Update
+  every time progress changes.
 - **reproduction**, **callflow**, **fix-plan**, **open-questions** —
-  `edit_note` (overwrite). Keep current. Callflow stays in the
-  bulleted `file:line — function — desc` form, not prose.
-
-- **findings**, **decisions** — append-only. Either add a new
-  section to the existing note with a header that the server's
-  auto-managed timestamp will identify, **or** write a new
-  standalone note `issue-<N>-finding-<slug>` that links back via
-  `[[wikilink]]`. Pick standalone when the entry is large enough to
-  scan on its own; otherwise append a section.
-
-  **Never edit a prior finding or decision.** To correct one:
-  append a new entry that says "supersedes [[prior-note-or-section]]
-  because <reason>". The server's `created_at` orders them; do not
-  hand-stamp dates.
+  keep current. Callflow stays in the bulleted
+  `file:line — function — desc` form, not prose.
+- **findings**, **decisions** — current understanding / current
+  rationale. When you learn the prior take was wrong, rewrite it.
+  Split into `issue-<N>-finding-<slug>` / `issue-<N>-decision-<slug>`
+  standalone notes only when one note gets too large to scan.
 
 ## Linking when writing
 
@@ -132,20 +127,10 @@ exists specifically to catch that.
 
 ## Fixing wrong / stale memory
 
-- **Editable kind, fact is wrong** → overwrite the wrong fact in
-  place.
-
-- **Append-only entry is now wrong** → append a superseding entry.
-  Reference the prior entry by `[[wikilink]]` (or by its section
-  header if same-note). State the reason for supersession. Then,
-  per the audit rule above, consider whether the original entry
-  (and anything that depended on it) should be cut from any
-  *editable* notes in the same write.
-
+- **Fact is wrong** → overwrite in place. Every kind.
 - **Two notes contradict, neither obviously stale** → do not write
   a fix unilaterally. Surface to the user (via `memory-read`'s
-  conflict handling), get a resolution, then record it as a new
-  finding/decision and edit/supersede the loser.
+  conflict handling), get a resolution, then overwrite the loser.
 
 ## Deleting
 
@@ -158,9 +143,8 @@ Use `delete_note` when:
   snapshot a one-line summary into `findings` before deleting.
 - Issue close-out (below).
 
-Never delete `findings`, `decisions`, or `status` mid-issue.
-After deleting, update `status`'s `[[wikilinks]]` so it stays
-accurate.
+Never delete `status` mid-issue. After deleting, update `status`'s
+`[[wikilinks]]` so it stays accurate.
 
 ## Issue close-out
 
@@ -168,11 +152,9 @@ When the PR ships or the issue closes:
 
 1. Write `issue-<N>-postmortem`, tagged
    `ros2, rclcpp, issue-<N>, postmortem`. Contents: one-paragraph
-   summary, the fix in one paragraph, `[[wikilinks]]` to the
-   surviving `decisions` and `findings`.
-2. `delete_note` on `status`, `reproduction`, `callflow`,
-   `fix-plan`, `open-questions` for that issue.
-3. Keep `decisions` and `findings` — audit trail.
+   summary, the fix in one paragraph, plus whatever from
+   `findings`/`decisions` is worth keeping (merged in or linked).
+2. `delete_note` on every other note for that issue.
 
 ## Multi-issue care
 
@@ -195,7 +177,6 @@ user does not want to be the gate between each one.
 
 - Don't write without first invoking `memory-read`.
 - Don't skip the scope sentence on line 1.
-- Don't edit a past `finding` or `decision` — supersede instead.
 - Don't paste verbatim code from the repo. Link to `file:line`.
 - Don't store commit hashes — they rot when branches are amended,
   rebased onto upstream, or squashed. Reference changes by file +
