@@ -11,7 +11,9 @@ deletion, close-out). This skill only adds the write-side workflow on
 top.
 
 Backend: `basic-memory` MCP — tools `mcp__basic-memory__write_note`,
-`edit_note`, `move_note`, `delete_note`.
+`edit_note`, `move_note`, `delete_note`. See
+`.claude/basic-memory-tool-guide.md` for known tool quirks — consult
+on first unexpected failure, do not retry the same payload.
 
 ## Always read before write
 
