@@ -87,25 +87,38 @@ Do **not** wait for "we're done." Save incrementally.
 - Cross-issue `[[wikilinks]]` allowed when one issue's note informs
   another. The tag set still names exactly one issue per note.
 
-## Fixing wrong / stale memory
+## Audit the whole note before every write
+
+Applies to **every** write: `write_note`, `edit_note`, `append`,
+`prepend`. Applies to **every** kind, append-only included. "I'm
+only adding a paragraph" is when most bloat accumulates — the rule
+exists specifically to catch that.
 
 - **These notes are your working memory, not the user's documentation.**
   The user doesn't read them. They exist so a fresh Claude instance
   can pick up the thread without re-deriving everything. Optimize for
   *your* re-read, not for completeness.
 
-- **Every `edit_note` on an editable kind triggers a full re-read
-  first.** Before you write, read the whole note and ask:
-  - Does the scope sentence still match the body? If not, re-scope
-    or split.
-  - Did this section help me just now, or could it plausibly help
-    next time? If neither, cut it. Bloat costs the next instance
-    context window for nothing.
-  - Are any facts contradicted by current code or another note?
-    Overwrite the wrong fact (editable) or append a supersede
-    (append-only).
-
-  You opened the note. You're already paying the read cost. Use it.
+- **Read the whole target note first, with intent to cut.** Before
+  the write, list every section that no longer earns its context
+  cost in *this* note, and cut them in the same write that adds new
+  content. Specifically look for:
+  - Sections motivating an approach that has since been rejected
+    (e.g. infrastructure facts gathered for a path you decided
+    against — gtest-timeout semantics, `try_lock` UB, leaked-process
+    counts when staged-deadlock testing was abandoned). When a
+    `decision` records a rejection, the `findings` paragraphs that
+    motivated the rejected approach usually go with it.
+  - Bullets advocating *for* the current approach when the current
+    approach is flagged unsatisfactory. A `findings` note should
+    record neutral facts, not arguments for code that may be
+    replaced.
+  - Reasoning duplicated between `findings` and `decisions` — pick
+    one home; the other gets a `[[wikilink]]`.
+  - Verification recipes that are mechanically re-derivable from the
+    code in under a minute. Keep the gotcha, drop the recipe.
+  - Scope-sentence drift: if line 1 no longer matches the body,
+    re-scope or split.
 
 - **Verify before you touch.** Adds, edits, and deletes all have to
   clear the same bar: 100% confidence the claim is true *right now*
@@ -117,9 +130,17 @@ Do **not** wait for "we're done." Save incrementally.
   sounds right" is not grounds to add. Slower is safer; the cost of
   a wrong write is paid by every future instance.
 
+## Fixing wrong / stale memory
+
+- **Editable kind, fact is wrong** → overwrite the wrong fact in
+  place.
+
 - **Append-only entry is now wrong** → append a superseding entry.
   Reference the prior entry by `[[wikilink]]` (or by its section
-  header if same-note). State the reason for supersession.
+  header if same-note). State the reason for supersession. Then,
+  per the audit rule above, consider whether the original entry
+  (and anything that depended on it) should be cut from any
+  *editable* notes in the same write.
 
 - **Two notes contradict, neither obviously stale** → do not write
   a fix unilaterally. Surface to the user (via `memory-read`'s
