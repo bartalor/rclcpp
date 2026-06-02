@@ -181,10 +181,14 @@ work you produce a finding that's really about issue-5678, write it
 under `issue-5678` tags and link from `issue-1234` via `[[wikilink]]`.
 Do not double-tag — it pollutes tag queries on both sides.
 
-## One write per turn
+## Pacing memory writes
 
-One MCP write per turn. No parallel writes, no chained edits in the
-same response. Wait for the user before the next one.
+No parallel writes. One MCP write per response — each write's
+server result (new permalink, conflict, error) informs the next
+one. But these are your notes, not the user's: do not stop and
+confirm between consecutive writes once the user has authorized
+the task. Continue across turns until the audit/cut/append plan is
+finished or the user redirects.
 
 ## Don't
 
