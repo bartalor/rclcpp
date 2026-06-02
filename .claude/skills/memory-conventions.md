@@ -15,10 +15,13 @@ file rather than letting drift go undocumented.
 
 Every note belongs to a category: either an issue (`issue-<N>`) or
 `utility` (anything not tied to an issue — branch tooling, local
-workflow, etc.). New categories may be added later. The tree shape,
-note kinds, and append-only rules below apply to the issue category.
-Utility notes are flat, edit-in-place, and just need the scope
-sentence + tags `ros2`, `rclcpp`, `utility`, `<topic>`.
+workflow, etc.). New categories may be added later. The tree shape
+and note kinds below apply to the issue category. Utility notes are
+flat and just need the scope sentence + tags `ros2`, `rclcpp`,
+`utility`, `<topic>`.
+
+All notes are edit-in-place. If a past entry is wrong, fix it
+directly. No append-only kinds, no supersede chains.
 
 ## Tree shape (issue category)
 
@@ -44,15 +47,17 @@ most important discipline; without it notes drift into useless soup.
 
 ## Note kinds
 
-| Kind            | Mutability   | Purpose                                                |
-|-----------------|--------------|--------------------------------------------------------|
-| `status`        | edit-in-place| Where we are now + next step. Entry point for sessions.|
-| `reproduction`  | edit-in-place| Exact steps/commands/configs that trigger the bug.     |
-| `callflow`      | edit-in-place| The code path under investigation. See format below.   |
-| `fix-plan`      | edit-in-place| Current proposed change. Replaced wholesale on pivot.  |
-| `open-questions`| edit-in-place| Unknowns. Removed when answered (answer → findings).   |
-| `findings`      | append-only  | Dated log of what we learned. Never rewrite history.   |
-| `decisions`     | append-only  | Dated log of choices made and why. Never rewrite.      |
+| Kind            | Purpose                                                |
+|-----------------|--------------------------------------------------------|
+| `status`        | Where we are now + next step. Entry point for sessions.|
+| `reproduction`  | Exact steps/commands/configs that trigger the bug.     |
+| `callflow`      | The code path under investigation. See format below.   |
+| `fix-plan`      | Current proposed change. Replaced wholesale on pivot.  |
+| `open-questions`| Unknowns. Removed when answered (answer → findings).   |
+| `findings`      | What we learned about the code/bug.                    |
+| `decisions`     | Choices made and why.                                  |
+
+All kinds are edit-in-place. Keep them current; staleness is a bug.
 
 Not every issue needs all seven. `status` is mandatory; the rest grow
 on demand.
@@ -95,28 +100,19 @@ even when content references another (see cross-issue links below).
   Reference changes by file + symbol + behaviour ("the `ignore_callbacks`
   flag on `NodeParameters::declare_parameter`"), not by hash.
 
-## Editable vs append-only — fixing wrong memory
+## Fixing wrong memory
 
-- **Editable kinds** (status, reproduction, callflow, fix-plan,
-  open-questions): `edit_note` and overwrite. Staleness is a bug.
-- **Append-only kinds** (findings, decisions): never edit a past
-  entry. Add a new note (or a new section in the same note) that
-  says "supersedes [[prior-note]] because <reason>". The server's
-  auto-managed `created_at` provides the timestamp — don't hand-stamp.
-  Latest entry wins; the trail stays auditable.
-
-No background sweep. Wrong memory is fixed when a read surfaces a
-contradiction with current code or another note — local, on-demand.
+All kinds are edit-in-place. When a read surfaces a contradiction
+with current code or another note, overwrite the wrong fact.
+No background sweep — fix on-demand.
 
 ## Deletion
 
-`status` and append-only notes (findings, decisions) live forever.
-Everything else is disposable:
+`status` lives forever. Everything else is disposable:
 
 - `open-questions` entries: delete when answered (answer → findings).
-- `reproduction`, `callflow`, `fix-plan`: delete when no longer true
-  *and* no longer historically interesting. If the historical version
-  matters, snapshot a one-liner into findings before deleting.
+- `reproduction`, `callflow`, `fix-plan`, `findings`, `decisions`:
+  delete when no longer true *and* no longer historically interesting.
 
 Without a deletion rule, the issue folder grows monotonically and
 old context starts polluting new chats.
@@ -127,11 +123,9 @@ When an issue ships (PR merged / closed wontfix):
 
 1. Write one final note: `issue-<N>-postmortem`, tagged
    `ros2, rclcpp, issue-<N>, postmortem`. Contents: one-paragraph
-   summary, the fix in one paragraph, links to the surviving
-   `decisions` and `findings`.
-2. Delete `status`, `reproduction`, `callflow`, `fix-plan`,
-   `open-questions` for that issue.
-3. Keep `decisions` and `findings` — they're the audit trail.
+   summary, the fix in one paragraph, plus whatever from
+   `findings`/`decisions` is worth keeping (merged in or linked).
+2. Delete every other note for that issue.
 
 You almost never need callflow for a closed issue; you do want one
 searchable summary.
