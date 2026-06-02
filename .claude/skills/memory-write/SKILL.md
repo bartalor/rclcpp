@@ -183,12 +183,13 @@ Do not double-tag — it pollutes tag queries on both sides.
 
 ## Pacing memory writes
 
-No parallel writes. One MCP write per response — each write's
-server result (new permalink, conflict, error) informs the next
-one. But these are your notes, not the user's: do not stop and
-confirm between consecutive writes once the user has authorized
-the task. Continue across turns until the audit/cut/append plan is
-finished or the user redirects.
+No parallel writes (serialize them — each write's server result
+may inform the next: new permalink, conflict, error). Otherwise,
+just do the work: once the user has authorized a memory task
+(audit, cut, append, supersede plan), execute all the writes in
+one response. Do not stop between writes, do not narrate "next
+I'll…", do not summarize what's left. These are your notes — the
+user does not want to be the gate between each one.
 
 ## Don't
 
