@@ -9,7 +9,7 @@
                 "llvm-vs-code-extensions.vscode-clangd",
                 "ms-vscode.cmake-tools",
                 "anthropic.claude-code",
-                "mhutchie.git-graph"
+                "hansu.git-graph-2"
             ],
             "settings": {
                 "clangd.arguments": [
