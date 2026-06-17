@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Block personal-path changes on non-personal branches.
 
-Config: .open-source-utils.toml at repo root.
+Config: `*.open-source-utils.toml` at repo root.
   branches.personal           -- the only branch allowed to touch personal paths
   paths.personal_branch       -- list of path prefixes considered personal
-If the config file is missing, abort.
+If no matching config file is present, abort.
 """
 import subprocess
 import sys
@@ -21,9 +21,10 @@ def main() -> None:
     repo_root = Path(
         subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
     )
-    config_path = repo_root / ".open-source-utils.toml"
-    if not config_path.exists():
-        fail(f"missing {config_path.name}; refusing to commit")
+    matches = sorted(repo_root.glob("*.open-source-utils.toml"))
+    if not matches:
+        fail("missing *.open-source-utils.toml; refusing to commit")
+    config_path = matches[0]
 
     with config_path.open("rb") as fh:
         config = tomllib.load(fh)
