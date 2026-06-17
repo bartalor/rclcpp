@@ -1,6 +1,8 @@
 ---
 name: memory-read
+
 description: Use BEFORE diagnosing a bug, explaining behaviour in a sensitive area, proposing a fix, or writing a new note — to check what we already know about this issue via the basic-memory MCP server. Also triggers on phrases like "do we have notes on", "what do we know about", "recall", "what did we decide about", "did we hit this before", "search memories", "continue <issue>", "where were we". Always read before write (see also memory-write).
+disable-model-invocation: true
 ---
 
 # Project memory — READ side (rclcpp)
