@@ -1,6 +1,6 @@
 {
     "name": "rclcpp-dev",
-    "dockerComposeFile": "compose.yaml",
+    "dockerComposeFile": ["compose.yaml", "compose.generated.yaml"],
     "service": "dev",
     "workspaceFolder": "${localWorkspaceFolder}",
     "customizations": {
@@ -8,8 +8,7 @@
             "extensions": [
                 "llvm-vs-code-extensions.vscode-clangd",
                 "ms-vscode.cmake-tools",
-                "anthropic.claude-code",
-                "hansu.git-graph-2"
+                "anthropic.claude-code"
             ],
             "settings": {
                 "clangd.arguments": [
@@ -18,7 +17,7 @@
             }
         }
     },
-    "initializeCommand": ".devcontainer/post-rebuild-host-setup.sh",
+    "initializeCommand": ".devcontainer/host-setup.sh",
     "onCreateCommand": ".devcontainer/on-create-command.sh",
     "updateContentCommand": ".devcontainer/update-content-command.sh",
     "postCreateCommand": ".devcontainer/post-create-command.sh",
