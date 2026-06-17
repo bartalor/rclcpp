@@ -22,7 +22,7 @@ else
 fi
 
 VERSION=${REL#hansu.git-graph-2-}
-docker exec -u ubuntu "$CONTAINER" python3 - "$REL" "$VERSION" <<'PY'
+docker exec -i -u ubuntu "$CONTAINER" python3 - "$REL" "$VERSION" <<'PY'
 import json, os, sys, pathlib
 rel, version = sys.argv[1], sys.argv[2]
 p = pathlib.Path("/home/ubuntu/.vscode-server/extensions/extensions.json")
