@@ -36,6 +36,10 @@ If the transition is not a function call — e.g. "the function returns, then la
 
 If you're tempted to skip a frame because it's "obvious," don't. The user is walking the path to understand it; skipped frames are exactly where confusion lives.
 
+## When the user flags a mistake
+
+Rewrite the **whole step** from scratch, corrected. Do not patch a paragraph, do not say "you're right, the fix is X" and move on. The user wants the corrected step in one place, top to bottom, so they can read it as the step. No meta-commentary, no apology paragraph — just the rewritten step.
+
 ## What this skill forbids
 
 - Teleporting: jumping to a new location without showing the call that connects it to the previous one.
