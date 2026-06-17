@@ -11,6 +11,7 @@ You commit pending personal-file changes onto the personal branch without touchi
 - NEVER touch a file that is not in the personal-paths list. No `git add -A`, no `git add .`, no `git stash`, no `git checkout .`, no `git reset --hard`. Stage files by exact path only.
 - NEVER assume what counts as personal. Read `rclcpp.open-source-utils.toml` every run.
 - If anything is ambiguous, abort and report. Do not guess.
+- If `git rev-parse --show-toplevel` is under `.claude/worktrees/`, abort: you need the real working tree, not an isolated copy.
 
 # Procedure
 
