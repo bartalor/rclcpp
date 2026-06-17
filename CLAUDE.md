@@ -1,6 +1,6 @@
 # Branching
 
-`bar/devcontainer` is the personal-preferences root: `.devcontainer/`, `.vscode/`, `CLAUDE.md`, etc.
+`bar/personal` is the personal-preferences root: `.devcontainer/`, `.vscode/`, `CLAUDE.md`, etc.
 
 # C++ navigation
 
