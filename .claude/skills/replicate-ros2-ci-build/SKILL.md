@@ -1,6 +1,7 @@
 ---
 name: replicate-ros2-ci-build
 description: Use when the user wants to reproduce a specific ci.ros2.org build (Windows, Linux, etc.) in GitHub Actions to debug a failing test or rebuild a known reference. Generic guidance below; Windows specifics are fleshed out, Linux is not yet documented.
+disable-model-invocation: true
 ---
 
 # Replicating a ci.ros2.org build in GitHub Actions
