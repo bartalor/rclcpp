@@ -1,6 +1,7 @@
 ---
 name: upstream-pr
 description: Use when preparing a pull request to upstream ros2/rclcpp. Points to where the PR conventions live, how we draft PRs locally, and the rule of matching style by reading recent commits.
+disable-model-invocation: true
 ---
 
 # Preparing an upstream PR for ros2/rclcpp

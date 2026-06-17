@@ -1,6 +1,7 @@
 ---
 name: memory-write
 description: Use AFTER a meaningful investigation step, AFTER a decision, AFTER learning something non-obvious, BEFORE context grows long, or when the user says "save that", "note that", "remember", "record this decision", "update status". Also use to fix wrong/stale memory, supersede a finding or decision, delete obsolete notes, or close out a finished issue. Always defer to memory-read first to avoid duplicates.
+disable-model-invocation: true
 ---
 
 # Project memory — WRITE side (rclcpp)

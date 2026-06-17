@@ -1,6 +1,7 @@
 ---
 name: memory-refactor
 description: Use when the user asks for a deliberate refactor, cleanup, or audit of an issue's memory ("refactor notes for <issue>", "clean up notes", "audit memory", "memory got messy", "prune stale"). Distinct from the incremental fixes memory-write does on the fly — this is an intentional pass over one issue's whole note set. ALWAYS audit-then-report first; never edit or delete in the audit phase.
+disable-model-invocation: true
 ---
 
 # Project memory — REFACTOR (rclcpp)
