@@ -1,5 +1,5 @@
 #!/bin/bash
-# Host-side setup for the mcp-memory plugin. Sourced by post-rebuild-host-setup.sh
+# Host-side setup for the mcp-memory plugin. Sourced by host-setup.sh
 # with copy_if_changed() and $CONTAINER already defined.
 set -eo pipefail
 
