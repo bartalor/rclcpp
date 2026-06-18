@@ -341,7 +341,7 @@ endif()
 
 ament_add_ros_isolated_gmock(test_qos_overriding_options test_qos_overriding_options.cpp)
 if(TARGET test_qos_overriding_options)
-  target_link_libraries(test_qos_overriding_options ${PROJECT_NAME})
+  target_link_libraries(test_qos_overriding_options ${PROJECT_NAME} test_msgs::test_msgs)
 endif()
 ament_add_ros_isolated_gmock(test_qos_parameters test_qos_parameters.cpp)
 if(TARGET test_qos_parameters)
