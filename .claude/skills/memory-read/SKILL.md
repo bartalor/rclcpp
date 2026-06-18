@@ -1,7 +1,7 @@
 ---
 name: memory-read
 
-description: Memory is a fallback for fresh sessions and post-compaction amnesia, not a per-question reflex. Use at session start when an issue is in scope, after a /compact when state may be lost, when the user explicitly asks ("do we have notes on", "recall", "search memories", "continue <issue>"), or before writing a note (memory-write defers here to dedupe). When the live conversation already has the answer, trust it — do not re-read memory to restate things the user just said.
+description: Fallback for cold starts and post-/compact amnesia, plus explicit recall requests ("do we have notes on", "search memories", "continue <issue>"), plus the dedupe check before memory-write. Not a per-question reflex.
 disable-model-invocation: true
 ---
 
