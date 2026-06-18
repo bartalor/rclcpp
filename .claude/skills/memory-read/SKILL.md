@@ -1,7 +1,7 @@
 ---
 name: memory-read
 
-description: Use BEFORE diagnosing a bug, explaining behaviour in a sensitive area, proposing a fix, or writing a new note — to check what we already know about this issue via the basic-memory MCP server. Also triggers on phrases like "do we have notes on", "what do we know about", "recall", "what did we decide about", "did we hit this before", "search memories", "continue <issue>", "where were we". Always read before write (see also memory-write).
+description: Memory is a fallback for fresh sessions and post-compaction amnesia, not a per-question reflex. Use at session start when an issue is in scope, after a /compact when state may be lost, when the user explicitly asks ("do we have notes on", "recall", "search memories", "continue <issue>"), or before writing a note (memory-write defers here to dedupe). When the live conversation already has the answer, trust it — do not re-read memory to restate things the user just said.
 disable-model-invocation: true
 ---
 
@@ -17,15 +17,19 @@ Backend: `basic-memory` MCP — tools `mcp__basic-memory__search_notes`,
 
 ## When to invoke
 
-- Session start when an issue is in scope (branch name, file paths,
-  `ide_selection`, or recent commits make the issue obvious).
-- Before proposing a fix or explaining behaviour in code you have not
-  recently touched.
-- Before writing a new note (the write skill MUST defer here first to
-  avoid duplicates).
-- When the user references an issue / PR / area we may have notes on
-  ("did we hit this before?", "what did we decide about X?",
-  "continue 1234", "where were we").
+Memory exists for two situations:
+1. **Cold start.** New session, or post-`/compact` amnesia where you've lost
+   context the live conversation no longer carries.
+2. **Explicit user request.** "Do we have notes on…", "what did we decide
+   about…", "search memories", "continue <issue>".
+
+Plus one mechanical case: **before writing a note** (memory-write defers
+here to avoid duplicates).
+
+That's it. When the live conversation already has the answer — including
+"where are we", "what's next", "what did we just decide" — answer from
+session context. Do **not** re-read `status` to recite things the user
+just told you in this session. Memory is not a script to run at the user.
 
 ## Workflow
 
@@ -37,9 +41,9 @@ Backend: `basic-memory` MCP — tools `mcp__basic-memory__search_notes`,
    already answers it is the wrong move. Only ask if context is
    genuinely ambiguous.
 
-2. **Read `status` first.** It is the entry point — current state
-   plus next step plus `[[wikilinks]]` down to whichever children
-   exist.
+2. **When invoking, read `status` first.** It is the entry point —
+   current state plus next step plus `[[wikilinks]]` down to whichever
+   children exist.
 
    ```
    search_notes { query: "status", tags: ["issue-<N>", "status"],
@@ -50,17 +54,22 @@ Backend: `basic-memory` MCP — tools `mcp__basic-memory__search_notes`,
    issue. Hand off to `memory-write` to seed `status` (ask the user
    for a one-liner first).
 
-3. **Pull other notes lazily, only what the current question needs.**
-   Do not pre-load callflow + findings + decisions "just in case" —
-   that wastes context. Map question → note:
+3. **Pull other notes lazily, only what the current question needs and
+   only when the session doesn't already have the answer.** Do not
+   pre-load callflow + findings + decisions "just in case" — that wastes
+   context. Map question → note (each conditional on cold-start or
+   explicit request):
 
-   - "where were we / what's next" → `status` alone.
    - "remind me how to reproduce" → `reproduction`.
    - "why did we choose X" / "should we do Y" → `decisions`
      (and `open-questions` if proposing a fix).
    - "walk me through the code path" → `callflow`.
-   - "what have we learned" / explaining behaviour → `findings`.
+   - "what have we learned" / explaining behaviour in code you have not
+     recently touched → `findings`.
    - "what's the current plan" → `fix-plan`.
+
+   "Where were we / what's next" mid-session is answered from the live
+   conversation, not from `status`.
 
 4. **Follow `[[wikilinks]]` deliberately.** `status` links down to
    the children that actually exist. Resolve a link by reading the
@@ -76,10 +85,8 @@ Backend: `basic-memory` MCP — tools `mcp__basic-memory__search_notes`,
 ## Handling conflicts and stale memory
 
 - If a note contradicts current code or another note, the note is
-  wrong. Editable kinds (status, reproduction, callflow, fix-plan,
-  open-questions): hand off to `memory-write` to overwrite. Append-only
-  kinds (findings, decisions): hand off to `memory-write` to add a
-  superseding entry. Do **not** silently work around stale memory.
+  wrong. All kinds are edit-in-place — hand off to `memory-write` to
+  overwrite. Do **not** silently work around stale memory.
 
 - If two notes contradict and neither is obviously stale, surface
   both to the user — do not pick silently. The user resolves; the
