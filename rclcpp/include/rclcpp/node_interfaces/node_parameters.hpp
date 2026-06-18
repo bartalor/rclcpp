@@ -121,7 +121,8 @@ public:
     const rclcpp::ParameterValue & default_value,
     const rcl_interfaces::msg::ParameterDescriptor & parameter_descriptor =
     rcl_interfaces::msg::ParameterDescriptor{},
-    bool ignore_override = false) override;
+    bool ignore_override = false,
+    bool ignore_callbacks = false) override;
 
   RCLCPP_PUBLIC
   const rclcpp::ParameterValue &
@@ -130,7 +131,8 @@ public:
     rclcpp::ParameterType type,
     const rcl_interfaces::msg::ParameterDescriptor & parameter_descriptor =
     rcl_interfaces::msg::ParameterDescriptor(),
-    bool ignore_override = false) override;
+    bool ignore_override = false,
+    bool ignore_callbacks = false) override;
 
   RCLCPP_PUBLIC
   void

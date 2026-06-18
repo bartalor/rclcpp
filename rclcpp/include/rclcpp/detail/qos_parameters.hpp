@@ -100,8 +100,11 @@ declare_parameter_or_get(
     // enable parameter modification to make it possible
     // to declare QoS override parameters during parameter callbacks.
     parameters_interface.enable_parameter_modification();
+    // ignore_callbacks=true: these are internal, read-only QoS override parameters.
+    // Invoking the user's on-set callback here would re-enter it on the same stack and
+    // deadlock if it holds a non-recursive lock (https://github.com/ros2/rclcpp/issues/2876).
     return parameters_interface.declare_parameter(
-      param_name, param_value, descriptor);
+      param_name, param_value, descriptor, false, true);
   } catch (const rclcpp::exceptions::ParameterAlreadyDeclaredException &) {
     return parameters_interface.get_parameter(param_name).get_parameter_value();
   }

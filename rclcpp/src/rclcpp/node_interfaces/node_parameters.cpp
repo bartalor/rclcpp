@@ -560,7 +560,8 @@ declare_parameter_helper(
   PostSetCallbacksHandleContainer & post_set_callback_container,
   rclcpp::Publisher<rcl_interfaces::msg::ParameterEvent> * events_publisher,
   const std::string & combined_name,
-  rclcpp::node_interfaces::NodeClockInterface & node_clock)
+  rclcpp::node_interfaces::NodeClockInterface & node_clock,
+  bool ignore_callbacks)
 {
   // TODO(sloretz) parameter name validation
   if (name.empty()) {
@@ -586,6 +587,17 @@ declare_parameter_helper(
     parameter_descriptor.type = static_cast<uint8_t>(type);
   }
 
+  // When asked to ignore callbacks, declare against empty callback containers so the
+  // user's on/post-set callbacks are not invoked. This is used for internally-declared
+  // parameters (e.g. QoS overrides), where re-entering a user callback that holds a
+  // non-recursive lock would deadlock (https://github.com/ros2/rclcpp/issues/2876).
+  OnSetCallbacksHandleContainer empty_on_set_callback_container;
+  PostSetCallbacksHandleContainer empty_post_set_callback_container;
+  OnSetCallbacksHandleContainer & on_set_callbacks =
+    ignore_callbacks ? empty_on_set_callback_container : on_set_callback_container;
+  PostSetCallbacksHandleContainer & post_set_callbacks =
+    ignore_callbacks ? empty_post_set_callback_container : post_set_callback_container;
+
   rcl_interfaces::msg::ParameterEvent parameter_event;
   auto result = __declare_parameter_common(
     name,
@@ -593,8 +605,8 @@ declare_parameter_helper(
     parameter_descriptor,
     parameters,
     overrides,
-    on_set_callback_container,
-    post_set_callback_container,
+    on_set_callbacks,
+    post_set_callbacks,
     &parameter_event,
     ignore_override);
 
@@ -628,7 +640,8 @@ NodeParameters::declare_parameter(
   const std::string & name,
   const rclcpp::ParameterValue & default_value,
   const rcl_interfaces::msg::ParameterDescriptor & parameter_descriptor,
-  bool ignore_override)
+  bool ignore_override,
+  bool ignore_callbacks)
 {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   ParameterMutationRecursionGuard guard(parameter_modification_enabled_);
@@ -645,7 +658,8 @@ NodeParameters::declare_parameter(
     post_set_parameters_callback_container_,
     events_publisher_.get(),
     combined_name_,
-    *node_clock_);
+    *node_clock_,
+    ignore_callbacks);
 }
 
 const rclcpp::ParameterValue &
@@ -653,7 +667,8 @@ NodeParameters::declare_parameter(
   const std::string & name,
   rclcpp::ParameterType type,
   const rcl_interfaces::msg::ParameterDescriptor & parameter_descriptor,
-  bool ignore_override)
+  bool ignore_override,
+  bool ignore_callbacks)
 {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   ParameterMutationRecursionGuard guard(parameter_modification_enabled_);
@@ -681,7 +696,8 @@ NodeParameters::declare_parameter(
     post_set_parameters_callback_container_,
     events_publisher_.get(),
     combined_name_,
-    *node_clock_);
+    *node_clock_,
+    ignore_callbacks);
 }
 
 void
