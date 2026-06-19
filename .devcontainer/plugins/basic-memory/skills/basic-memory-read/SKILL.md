@@ -1,13 +1,13 @@
 ---
-name: memory-read
+name: basic-memory-read
 
-description: Fallback for cold starts and post-/compact amnesia, plus explicit recall requests ("do we have notes on", "search memories", "continue <issue>"), plus the dedupe check before memory-write. Not a per-question reflex.
+description: Fallback for cold starts and post-/compact amnesia, plus explicit recall requests ("do we have notes on", "search memories", "continue <issue>"), plus the dedupe check before basic-memory-write. Not a per-question reflex.
 disable-model-invocation: true
 ---
 
 # Project memory — READ side (rclcpp)
 
-Before doing anything: read `../memory-conventions.md` for the shared
+Before doing anything: read `../basic-memory-conventions.md` for the shared
 data model (tree shape, note kinds, tagging, scope rule, mutability,
 deletion, close-out). This skill only adds the read-side workflow on
 top.
@@ -23,7 +23,7 @@ Memory exists for two situations:
 2. **Explicit user request.** "Do we have notes on…", "what did we decide
    about…", "search memories", "continue <issue>".
 
-Plus one mechanical case: **before writing a note** (memory-write defers
+Plus one mechanical case: **before writing a note** (basic-memory-write defers
 here to avoid duplicates).
 
 That's it. When the live conversation already has the answer — including
@@ -51,7 +51,7 @@ just told you in this session. Memory is not a script to run at the user.
    ```
 
    Then `read_note` on the hit. If zero hits → this is a brand-new
-   issue. Hand off to `memory-write` to seed `status` (ask the user
+   issue. Hand off to `basic-memory-write` to seed `status` (ask the user
    for a one-liner first).
 
 3. **Pull other notes lazily, only what the current question needs and
@@ -85,7 +85,7 @@ just told you in this session. Memory is not a script to run at the user.
 ## Handling conflicts and stale memory
 
 - If a note contradicts current code or another note, the note is
-  wrong. All kinds are edit-in-place — hand off to `memory-write` to
+  wrong. All kinds are edit-in-place — hand off to `basic-memory-write` to
   overwrite. Do **not** silently work around stale memory.
 
 - If two notes contradict and neither is obviously stale, surface
@@ -93,7 +93,7 @@ just told you in this session. Memory is not a script to run at the user.
   write skill records the resolution.
 
 - Notes whose scope sentence (line 1) no longer matches their body
-  are drift. Flag and hand off to `memory-write` to re-scope or
+  are drift. Flag and hand off to `basic-memory-write` to re-scope or
   split.
 
 ## Citing what you read
