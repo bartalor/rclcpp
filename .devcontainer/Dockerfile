@@ -48,6 +48,14 @@ RUN apt-get update && \
 RUN curl -LsSf https://astral.sh/uv/install.sh | \
     UV_INSTALL_DIR=/usr/local/bin sh
 
+# ClangBuildAnalyzer (pinned) for -ftime-trace aggregation
+RUN git clone --depth 1 --branch v1.5.0 \
+        https://github.com/aras-p/ClangBuildAnalyzer.git /tmp/cba && \
+    cmake -S /tmp/cba -B /tmp/cba/build -DCMAKE_BUILD_TYPE=Release && \
+    cmake --build /tmp/cba/build --parallel && \
+    install -m 0755 /tmp/cba/build/ClangBuildAnalyzer /usr/local/bin/ && \
+    rm -rf /tmp/cba
+
 # share the colcon mixin index (release, ccache, compile-commands, lld, ...)
 # system-wide via COLCON_HOME so root and ubuntu read the same config.
 ENV COLCON_HOME=/etc/colcon
