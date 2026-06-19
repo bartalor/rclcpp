@@ -1,14 +1,14 @@
 ---
-name: memory-refactor
-description: Use when the user asks for a deliberate refactor, cleanup, or audit of an issue's memory ("refactor notes for <issue>", "clean up notes", "audit memory", "memory got messy", "prune stale"). Distinct from the incremental fixes memory-write does on the fly — this is an intentional pass over one issue's whole note set. ALWAYS audit-then-report first; never edit or delete in the audit phase.
+name: basic-memory-refactor
+description: Use when the user asks for a deliberate refactor, cleanup, or audit of an issue's memory ("refactor notes for <issue>", "clean up notes", "audit memory", "memory got messy", "prune stale"). Distinct from the incremental fixes basic-memory-write does on the fly — this is an intentional pass over one issue's whole note set. ALWAYS audit-then-report first; never edit or delete in the audit phase.
 disable-model-invocation: true
 ---
 
 # Project memory — REFACTOR (rclcpp)
 
-Before doing anything: read `../memory-conventions.md` for the shared
-data model. This skill operates on top of `memory-read` and
-`memory-write` — it does not replace them.
+Before doing anything: read `../basic-memory-conventions.md` for the shared
+data model. This skill operates on top of `basic-memory-read` and
+`basic-memory-write` — it does not replace them.
 
 ## Scope
 
@@ -22,7 +22,7 @@ this skill unless the user names one explicitly.
 
 ### Phase 1: audit and report. NO writes, NO deletes.
 
-1. Pull every note tagged `issue-<N>` (use `memory-read`).
+1. Pull every note tagged `issue-<N>` (use `basic-memory-read`).
 2. For each note, check against the conventions:
    - Does line 1 hold a scope sentence? Does it still match the body?
    - Is the kind right for the content? (e.g. running log of learnings
@@ -67,7 +67,7 @@ this skill unless the user names one explicitly.
 
 ### Phase 2: execute approved changes only.
 
-- For each approved item, perform the action via `memory-write`
+- For each approved item, perform the action via `basic-memory-write`
   (which knows the supersede/edit/delete rules).
 - After every delete or new child, update `status`'s `[[wikilinks]]`
   so it remains an accurate directory.
@@ -102,5 +102,5 @@ specific phrase or section that's the problem.
   supersede it; if Phase 1 missed it, surface it now and re-enter
   Phase 1 for that item.
 - Don't run this skill as part of normal write traffic. The
-  incremental drift-fixes belong in `memory-write`. This skill is
+  incremental drift-fixes belong in `basic-memory-write`. This skill is
   for intentional passes only.

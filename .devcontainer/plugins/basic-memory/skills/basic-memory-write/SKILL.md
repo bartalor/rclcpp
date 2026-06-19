@@ -1,24 +1,24 @@
 ---
-name: memory-write
-description: Use AFTER a meaningful investigation step, AFTER a decision, AFTER learning something non-obvious, BEFORE context grows long, or when the user says "save that", "note that", "remember", "record this decision", "update status". Also use to fix wrong/stale memory, supersede a finding or decision, delete obsolete notes, or close out a finished issue. Always defer to memory-read first to avoid duplicates.
+name: basic-memory-write
+description: Use AFTER a meaningful investigation step, AFTER a decision, AFTER learning something non-obvious, BEFORE context grows long, or when the user says "save that", "note that", "remember", "record this decision", "update status". Also use to fix wrong/stale memory, supersede a finding or decision, delete obsolete notes, or close out a finished issue. Always defer to basic-memory-read first to avoid duplicates.
 disable-model-invocation: true
 ---
 
 # Project memory — WRITE side (rclcpp)
 
-Before doing anything: read `../memory-conventions.md` for the shared
+Before doing anything: read `../basic-memory-conventions.md` for the shared
 data model (tree shape, note kinds, tagging, scope rule, mutability,
 deletion, close-out). This skill only adds the write-side workflow on
 top.
 
 Backend: `basic-memory` MCP — tools `mcp__basic-memory__write_note`,
 `edit_note`, `move_note`, `delete_note`. See
-`.claude/basic-memory-tool-guide.md` for known tool quirks — consult
+`.claude/skills/basic-memory-tool-guide.md` for known tool quirks — consult
 on first unexpected failure, do not retry the same payload.
 
 ## Always read before write
 
-Invoke the `memory-read` skill first to:
+Invoke the `basic-memory-read` skill first to:
 
 - Find the existing `status` for this issue (and confirm whether
   this is a new issue or a continuation).
@@ -130,7 +130,7 @@ exists specifically to catch that.
 
 - **Fact is wrong** → overwrite in place. Every kind.
 - **Two notes contradict, neither obviously stale** → do not write
-  a fix unilaterally. Surface to the user (via `memory-read`'s
+  a fix unilaterally. Surface to the user (via `basic-memory-read`'s
   conflict handling), get a resolution, then overwrite the loser.
 
 ## Deleting
@@ -176,12 +176,12 @@ user does not want to be the gate between each one.
 
 ## Don't
 
-- Don't write without first invoking `memory-read`.
+- Don't write without first invoking `basic-memory-read`.
 - Don't skip the scope sentence on line 1.
 - Don't paste verbatim code from the repo. Link to `file:line`.
 - Don't store commit hashes — they rot when branches are amended,
   rebased onto upstream, or squashed. Reference changes by file +
-  symbol + behaviour. (See `memory-conventions.md` "What NOT to store".)
+  symbol + behaviour. (See `basic-memory-conventions.md` "What NOT to store".)
 - Don't hand-stamp dates. The server tracks `created_at` /
   `updated_at`.
 - Don't leave `status`'s `[[wikilinks]]` stale after creating or
