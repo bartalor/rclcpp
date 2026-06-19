@@ -27,6 +27,7 @@ RUN apt-get update && \
       cmake \
       gdb \
       gh \
+      clang \
       clangd \
       git \
       openssh-client \
