@@ -12,7 +12,8 @@
             ],
             "settings": {
                 "clangd.arguments": [
-                    "--compile-commands-dir=/opt/overlay_ws/build/rclcpp"
+                    "--compile-commands-dir=/opt/overlay_ws/build/rclcpp",
+                    "--path-mappings=/home/bar/src/ros2/rclcpp=/opt/overlay_ws/src/rclcpp/rclcpp"
                 ]
             }
         }
