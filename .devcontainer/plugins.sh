@@ -5,4 +5,5 @@ PLUGINS=(
     mcp-cpp
     open-source-utils
     git-graph-2
+    bench-1949
 )
