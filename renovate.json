@@ -7,5 +7,17 @@
       "matchDatasources": ["docker"],
       "abandonmentThreshold": "60 days"
     }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.devcontainer/Dockerfile$/"],
+      "matchStrings": [
+        "git\\+https://github\\.com/(?<depName>[^/]+/[^/.]+)\\.git@(?<currentDigest>[a-f0-9]{40})"
+      ],
+      "datasourceTemplate": "git-refs",
+      "packageNameTemplate": "https://github.com/{{depName}}",
+      "currentValueTemplate": "master"
+    }
   ]
 }
