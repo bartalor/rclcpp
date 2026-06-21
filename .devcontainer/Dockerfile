@@ -65,7 +65,7 @@ RUN colcon mixin add default https://raw.githubusercontent.com/colcon/colcon-mix
 
 # colcon-cache (third-party plugin, pinned to a known-good revision)
 RUN pip3 install --break-system-packages \
-    git+https://github.com/ruffsl/colcon-cache.git@a937541bfc496c7a267db7ee9d6cceca61e470ca
+    git+https://github.com/ruffsl/colcon-cache.git@842696e3e437717046fd31a43a50be4070f23640
 
 # keep apt lists for runtime rosdep install
 RUN mv /etc/apt/apt.conf.d/docker-clean /etc/apt/
