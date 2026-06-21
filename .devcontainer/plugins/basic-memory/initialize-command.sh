@@ -1,5 +1,5 @@
 # Symlink this plugin's skills into .claude/skills/ and exclude the link
-# names from git. Sourced by host-setup.sh with $REPO_ROOT set.
+# names from git. Sourced by initialize-command.sh with $REPO_ROOT set.
 
 SRC_DIR="$REPO_ROOT/.devcontainer/plugins/basic-memory/skills"
 DST_DIR="$REPO_ROOT/.claude/skills"

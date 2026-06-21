@@ -1,6 +1,6 @@
 # Copy the host's sideloaded Git Graph 2 fork (hansu.git-graph-2, not on the
 # marketplace) into the container's VS Code Server extensions dir and register
-# it in extensions.json. Sourced by host-setup.sh with $CONTAINER set.
+# it in extensions.json. Sourced by initialize-command.sh with $CONTAINER set.
 
 SRC=$(ls -d "$HOME"/.vscode/extensions/hansu.git-graph-2-* 2>/dev/null | sort -V | tail -n1)
 if [ -z "$SRC" ]; then

@@ -1,4 +1,4 @@
-# Remove the symlinks installed by on-host.sh and drop their entries from
+# Remove the symlinks installed by initialize-command.sh and drop their entries from
 # .git/info/exclude. Sourced by uninstall-disabled-plugins.sh with
 # $REPO_ROOT set.
 
