@@ -13,12 +13,12 @@ echo 'source "$OVERLAY_WS/install/setup.bash"' >> ~/.bashrc
 # Wire repo-tracked git hooks
 git -C "$(cd "$(dirname "$0")/.." && pwd)" config core.hooksPath .githooks
 
-# Run in-container hook for each enabled plugin (in-container.sh or .py)
+# Run post-create hook for each enabled plugin (post-create-command.sh or .py)
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=plugins.sh
 . "$HERE/plugins.sh"
 for plugin in "${PLUGINS[@]}"; do
-    for hook in "$HERE/plugins/$plugin"/in-container.{sh,py}; do
+    for hook in "$HERE/plugins/$plugin"/post-create-command.{sh,py}; do
         if [ -x "$hook" ]; then
             echo "plugin $plugin: running $(basename "$hook")"
             "$hook"

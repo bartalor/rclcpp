@@ -18,9 +18,10 @@
             }
         }
     },
-    "initializeCommand": ".devcontainer/host-setup.sh",
+    "initializeCommand": ".devcontainer/initialize-command.sh",
     "onCreateCommand": ".devcontainer/on-create-command.sh",
     "updateContentCommand": ".devcontainer/update-content-command.sh",
     "postCreateCommand": ".devcontainer/post-create-command.sh",
+    "postStartCommand": ".devcontainer/post-start-command.sh",
     "remoteUser": "ubuntu"
 }
