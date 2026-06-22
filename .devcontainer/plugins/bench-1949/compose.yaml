@@ -1,7 +1,11 @@
 services:
   dev:
     build:
+      # Restate top-level build context+dockerfile: compose merges this
+      # block over the base service's build:, and otherwise loses them.
+      context: ../..
+      dockerfile: Dockerfile
       additional_contexts:
-        bench-1949: ./plugins/bench-1949
+        bench-1949: .
     volumes:
       - /home/bar/src/bench-rclcpp-1949:/home/bar/src/bench-rclcpp-1949
