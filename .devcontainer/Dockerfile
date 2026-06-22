@@ -48,14 +48,6 @@ RUN apt-get update && \
 RUN curl -LsSf https://astral.sh/uv/install.sh | \
     UV_INSTALL_DIR=/usr/local/bin sh
 
-# ClangBuildAnalyzer (pinned) for -ftime-trace aggregation
-RUN git clone --depth 1 --branch v1.5.0 \
-        https://github.com/aras-p/ClangBuildAnalyzer.git /tmp/cba && \
-    cmake -S /tmp/cba -B /tmp/cba/build -DCMAKE_BUILD_TYPE=Release && \
-    cmake --build /tmp/cba/build --parallel && \
-    install -m 0755 /tmp/cba/build/ClangBuildAnalyzer /usr/local/bin/ && \
-    rm -rf /tmp/cba
-
 # share the colcon mixin index (release, ccache, compile-commands, lld, ...)
 # system-wide via COLCON_HOME so root and ubuntu read the same config.
 ENV COLCON_HOME=/etc/colcon
@@ -66,6 +58,10 @@ RUN colcon mixin add default https://raw.githubusercontent.com/colcon/colcon-mix
 # colcon-cache (third-party plugin, pinned to a known-good revision)
 RUN pip3 install --break-system-packages \
     git+https://github.com/ruffsl/colcon-cache.git@842696e3e437717046fd31a43a50be4070f23640
+
+# bench-rclcpp-1949: ClangBuildAnalyzer + python deps. Sourced from the
+# plugin via --build-context so the steps live next to the plugin.
+RUN --mount=from=bench-1949,target=/bench-1949 /bench-1949/install.sh
 
 # keep apt lists for runtime rosdep install
 RUN mv /etc/apt/apt.conf.d/docker-clean /etc/apt/
