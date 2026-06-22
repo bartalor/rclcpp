@@ -1,4 +1,7 @@
 services:
   dev:
+    build:
+      additional_contexts:
+        bench-1949: ./plugins/bench-1949
     volumes:
       - /home/bar/src/bench-rclcpp-1949:/home/bar/src/bench-rclcpp-1949
