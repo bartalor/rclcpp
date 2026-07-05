@@ -15,11 +15,43 @@
 #ifndef RCLCPP__LOGGING_HPP_
 #define RCLCPP__LOGGING_HPP_
 
+#include <chrono>
 #include <sstream>
 #include <type_traits>
 
+#include "rclcpp/duration.hpp"
 #include "rclcpp/logger.hpp"
 #include "rcutils/logging_macros.h"
+
+namespace rclcpp
+{
+namespace detail
+{
+
+// Convert a throttle-duration argument (integral ms, rclcpp::Duration, or
+// std::chrono::duration) into whole milliseconds, matching the integer-ms
+// contract of RCUTILS_LOG_THROTTLE_NAMED.
+template<typename T>
+constexpr auto log_throttle_duration_to_ms(T duration_ms)
+->std::enable_if_t<std::is_integral<T>::value, rcutils_duration_value_t>
+{
+  return static_cast<rcutils_duration_value_t>(duration_ms);
+}
+
+inline rcutils_duration_value_t log_throttle_duration_to_ms(const rclcpp::Duration & duration)
+{
+  return duration.to_chrono<std::chrono::milliseconds>().count();
+}
+
+template<typename Rep, typename Period>
+constexpr rcutils_duration_value_t log_throttle_duration_to_ms(
+  std::chrono::duration<Rep, Period> duration)
+{
+  return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+}
+
+}  // namespace detail
+}  // namespace rclcpp
 
 // These are used for compiling out logging macros lower than a minimum severity.
 #define RCLCPP_LOG_MIN_SEVERITY_DEBUG 0
@@ -125,7 +157,8 @@
  *
  * \param logger The `rclcpp::Logger` to use
  * \param clock rclcpp::Clock that will be used to get the time point.
- * \param duration The duration of the throttle interval as an integral value in milliseconds.
+ * \param duration The duration of the throttle interval; accepts an integral
+ *   value in milliseconds, an `rclcpp::Duration`, or a `std::chrono::duration`.
  * \param ... The format string, followed by the variable arguments for the format string.
  */
 #define RCLCPP_LOG_THROTTLE(severity, logger, clock, duration, ...) \
@@ -134,7 +167,7 @@
     RCUTILS_LOG_THROTTLE_NAMED( \
       severity, \
       RCLCPP_LOG_TIME_POINT_FUNC(clock), \
-      duration, \
+      ::rclcpp::detail::log_throttle_duration_to_ms(duration), \
       (logger).get_name(), \
       __VA_ARGS__); \
   } while (0)
@@ -147,7 +180,8 @@
  *
  * \param logger The `rclcpp::Logger` to use
  * \param clock rclcpp::Clock that will be used to get the time point.
- * \param duration The duration of the throttle interval as an integral value in milliseconds.
+ * \param duration The duration of the throttle interval; accepts an integral
+ *   value in milliseconds, an `rclcpp::Duration`, or a `std::chrono::duration`.
  * \param ... The format string, followed by the variable arguments for the format string.
  */
 #define RCLCPP_LOG_SKIPFIRST_THROTTLE(severity, logger, clock, duration, ...) \
@@ -156,7 +190,7 @@
     RCUTILS_LOG_SKIPFIRST_THROTTLE_NAMED( \
       severity, \
       RCLCPP_LOG_TIME_POINT_FUNC(clock), \
-      duration, \
+      ::rclcpp::detail::log_throttle_duration_to_ms(duration), \
       (logger).get_name(), \
       __VA_ARGS__); \
   } while (0)
@@ -260,7 +294,8 @@
  *
  * \param logger The `rclcpp::Logger` to use
  * \param clock rclcpp::Clock that will be used to get the time point.
- * \param duration The duration of the throttle interval as an integral value in milliseconds.
+ * \param duration The duration of the throttle interval; accepts an integral
+ *   value in milliseconds, an `rclcpp::Duration`, or a `std::chrono::duration`.
  * \param stream_arg The argument << into a stringstream
  */
 #define RCLCPP_LOG_STREAM_THROTTLE(severity, logger, clock, duration, stream_arg) \
@@ -271,7 +306,7 @@
     RCUTILS_LOG_THROTTLE_NAMED( \
       severity, \
       RCLCPP_LOG_TIME_POINT_FUNC(clock), \
-      duration, \
+      ::rclcpp::detail::log_throttle_duration_to_ms(duration), \
       (logger).get_name(), \
       "%s", rclcpp_stream_ss_.str().c_str()); \
   } while (0)
@@ -284,7 +319,8 @@
  *
  * \param logger The `rclcpp::Logger` to use
  * \param clock rclcpp::Clock that will be used to get the time point.
- * \param duration The duration of the throttle interval as an integral value in milliseconds.
+ * \param duration The duration of the throttle interval; accepts an integral
+ *   value in milliseconds, an `rclcpp::Duration`, or a `std::chrono::duration`.
  * \param stream_arg The argument << into a stringstream
  */
 #define RCLCPP_LOG_STREAM_SKIPFIRST_THROTTLE(severity, logger, clock, duration, stream_arg) \
@@ -295,7 +331,7 @@
     RCUTILS_LOG_SKIPFIRST_THROTTLE_NAMED( \
       severity, \
       RCLCPP_LOG_TIME_POINT_FUNC(clock), \
-      duration, \
+      ::rclcpp::detail::log_throttle_duration_to_ms(duration), \
       (logger).get_name(), \
       "%s", rclcpp_stream_ss_.str().c_str()); \
   } while (0)

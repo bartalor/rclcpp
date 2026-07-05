@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "rclcpp/clock.hpp"
+#include "rclcpp/duration.hpp"
 #include "rclcpp/logger.hpp"
 #include "rclcpp/logging.hpp"
 #include "rcutils/logging.h"
@@ -227,6 +228,37 @@ TEST_F(TestLoggingMacros, test_throttle) {
       EXPECT_EQ(8u, g_log_calls);
     }
   }
+}
+
+TEST_F(TestLoggingMacros, test_throttle_duration_types) {
+  using namespace std::chrono_literals;
+  rclcpp::Clock ros_clock(RCL_ROS_TIME);
+  rcl_clock_t * clock = ros_clock.get_clock_handle();
+  ASSERT_TRUE(clock);
+  ASSERT_EQ(RCL_RET_OK, rcl_enable_ros_time_override(clock));
+  ASSERT_EQ(RCL_RET_OK, rcl_set_ros_time_override(clock, RCUTILS_MS_TO_NS(0)));
+
+  // rclcpp::Duration argument — first call after a long enough gap must log.
+  RCLCPP_DEBUG_THROTTLE(g_logger, ros_clock, rclcpp::Duration(0, 0), "duration ok");
+  EXPECT_EQ(1u, g_log_calls);
+  EXPECT_EQ("duration ok", g_last_log_event.message);
+
+  // std::chrono::duration argument — advance the clock past the interval, log again.
+  ASSERT_EQ(RCL_RET_OK, rcl_set_ros_time_override(clock, RCUTILS_MS_TO_NS(50)));
+  RCLCPP_DEBUG_THROTTLE(g_logger, ros_clock, 10ms, "chrono ok");
+  EXPECT_EQ(2u, g_log_calls);
+  EXPECT_EQ("chrono ok", g_last_log_event.message);
+
+  // Same types also accepted by the stream and skipfirst variants.
+  ASSERT_EQ(RCL_RET_OK, rcl_set_ros_time_override(clock, RCUTILS_MS_TO_NS(200)));
+  RCLCPP_DEBUG_STREAM_THROTTLE(g_logger, ros_clock, 10ms, "stream " << "chrono");
+  EXPECT_EQ(3u, g_log_calls);
+  EXPECT_EQ("stream chrono", g_last_log_event.message);
+
+  ASSERT_EQ(RCL_RET_OK, rcl_set_ros_time_override(clock, RCUTILS_MS_TO_NS(400)));
+  RCLCPP_DEBUG_SKIPFIRST_THROTTLE(g_logger, ros_clock, rclcpp::Duration(0, 0), "skip duration");
+  // SKIPFIRST swallows the very first call regardless of clock.
+  EXPECT_EQ(3u, g_log_calls);
 }
 
 TEST_F(TestLoggingMacros, test_parameter_expression) {
