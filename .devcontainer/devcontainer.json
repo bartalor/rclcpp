@@ -1,0 +1,53 @@
+{
+    "name": "rclcpp-dev",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "workspaceFolder": "${localWorkspaceFolder}",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/opt/overlay_ws/src/rclcpp,type=bind",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "llvm-vs-code-extensions.vscode-clangd",
+                "ms-vscode.cmake-tools",
+                "anthropic.claude-code",
+                "mhutchie.git-graph"
+            ],
+            "settings": {
+                "clangd.arguments": [
+                    "--compile-commands-dir=/opt/overlay_ws/build/rclcpp"
+                ]
+            }
+        }
+    },
+    "containerEnv": {
+        "DISPLAY": "unix:0",
+        "ROS_AUTOMATIC_DISCOVERY_RANGE": "LOCALHOST",
+        "ROS_DOMAIN_ID": "42"
+    },
+    "remoteEnv": {
+        "OVERLAY_MIXINS": "release ccache compile-commands lld",
+        "CCACHE_DIR": "/tmp/.ccache"
+    },
+    "runArgs": [
+        "--net=host",
+        "--pid=host",
+        "--ipc=host",
+        "-e", "DISPLAY=${env:DISPLAY}"
+    ],
+    "mounts": [
+        "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
+        "source=${localEnv:HOME}/.claude,target=/home/ubuntu/.claude,type=bind",
+        "source=${localEnv:HOME}/.claude/settings.json,target=/home/ubuntu/.claude/settings.json,type=bind,readonly",
+        "source=${localEnv:HOME}/.config/git/ignore,target=/home/ubuntu/.config/git/ignore,type=bind,readonly",
+        "source=${localEnv:HOME}/.config/gh,target=/home/ubuntu/.config/gh,type=bind",
+        "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached",
+        "source=/dev/dri,target=/dev/dri,type=bind,consistency=cached",
+        "source=ccache-${devcontainerId},target=/tmp/.ccache,type=volume",
+        "source=overlay-${devcontainerId},target=/opt/overlay_ws,type=volume"
+    ],
+    "onCreateCommand": ".devcontainer/on-create-command.sh",
+    "updateContentCommand": ".devcontainer/update-content-command.sh",
+    "postCreateCommand": ".devcontainer/post-create-command.sh",
+    "remoteUser": "ubuntu"
+}
