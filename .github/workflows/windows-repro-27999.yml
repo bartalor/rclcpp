@@ -33,7 +33,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Workaround for actions/runner-images#13729: Docker Engine v29+ on
       # windows-2022 randomly fails to start at runner boot (Hyper-V virtual
