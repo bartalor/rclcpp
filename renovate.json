@@ -6,6 +6,12 @@
     {
       "matchDatasources": ["docker"],
       "abandonmentThreshold": "60 days"
+    },
+    {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["ros"],
+      "matchUpdateTypes": ["digest"],
+      "enabled": false
     }
   ],
   "customManagers": [
